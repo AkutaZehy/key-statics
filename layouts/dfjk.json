@@ -1,0 +1,12 @@
+{
+    "name": "DFJK (4 Keys)",
+    "unitWidth": 80,
+    "unitHeight": 80,
+    "keySpacing": 8,
+    "keys": [
+        {"vkCode": 68, "label": "D", "row": 0, "col": 0, "width": 1},
+        {"vkCode": 70, "label": "F", "row": 0, "col": 1, "width": 1},
+        {"vkCode": 74, "label": "J", "row": 0, "col": 2, "width": 1},
+        {"vkCode": 75, "label": "K", "row": 0, "col": 3, "width": 1}
+    ]
+}

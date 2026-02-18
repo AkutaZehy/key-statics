@@ -1,0 +1,36 @@
+# Qt
+*.pro.user
+*.autosave
+*.m4
+qrc_*.cpp
+ui_*.h
+moc_*.cpp
+qrc_*.cpp
+Makefile*
+*.o
+*.obj
+*.exe
+*.dll
+*.dylib
+*.a
+*.so
+*.dll
+
+# Build
+build/
+cmake-build-*/
+*.user
+*.autosave
+.qmake.stash
+release/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
