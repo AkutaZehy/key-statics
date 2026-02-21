@@ -1,0 +1,14 @@
+{
+    "name": "WASD + Mouse",
+    "keys": [
+        {"vkCode": 87, "label": "W", "row": 0, "col": 1, "width": 1},
+        {"vkCode": 65, "label": "A", "row": 1, "col": 0, "width": 1},
+        {"vkCode": 83, "label": "S", "row": 1, "col": 1, "width": 1},
+        {"vkCode": 68, "label": "D", "row": 1, "col": 2, "width": 1},
+        {"vkCode": 1, "label": "LMB", "row": 0, "col": 4, "width": 1},
+        {"vkCode": 2, "label": "RMB", "row": 0, "col": 5, "width": 1},
+        {"vkCode": 4, "label": "MMB", "row": 0, "col": 6, "width": 1},
+        {"vkCode": 5, "label": "X1", "row": 0, "col": 7, "width": 1},
+        {"vkCode": 6, "label": "X2", "row": 0, "col": 8, "width": 1}
+    ]
+}

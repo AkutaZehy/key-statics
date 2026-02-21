@@ -47,6 +47,8 @@ The keyboard overlay will display key presses in real-time.
 - **104keys.json** - Full-size 104-key keyboard
 - **dfjk.json** - Minimal DFJK layout (4 keys)
 - **dfjk-mouse.json** - DFJK layout with mouse buttons
+- **wasd.json** - WASD layout (4 keys)
+- **wasd-mouse.json** - WASD layout with mouse buttons
 
 ### Switching Layouts
 
