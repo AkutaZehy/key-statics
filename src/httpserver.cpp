@@ -15,6 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "httpserver.h"
+#include "config.h"
 #include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -122,13 +123,14 @@ void HttpServer::onReadyRead() {
 }
 
 void HttpServer::sendHtml(QTcpSocket* socket) {
+    Config* config = Config::instance();
     QString html = R"(<!DOCTYPE html>
 <html>
 <head>
     <meta charset="UTF-8">
     <title>Key Stats</title>
     <style>
-        body { background: transparent; margin: 0; padding: 10px; font-family: monospace; }
+        body { background: transparent; margin: 0; padding: 10px; font-family: )" + config->fontFamily() + R"(; }
         .keyboard {
             position: relative;
             width: 1000px;
@@ -136,7 +138,7 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
         }
         .key { 
             position: absolute;
-            background: rgba(40,40,40,0.8); 
+            background: )" + config->keyColor() + R"(; 
             border: 1px solid #555; 
             border-radius: 4px; 
             padding: 4px; 
@@ -147,8 +149,9 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
             align-items: center;
             justify-content: center;
             box-sizing: border-box;
+            transition: background 0.1s;
         }
-        .key.pressed { background: rgba(0,150,255,0.9); }
+        .key.pressed { background: )" + config->keyActiveColor() + R"(; }
         .stats { color: #0f0; font-size: 14px; margin-bottom: 10px; }
     </style>
 </head>
@@ -159,9 +162,9 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
     </div>
     <div class="keyboard" id="keyboard"></div>
     <script>
-        const unitWidth = 40;
-        const unitHeight = 40;
-        const keySpacing = 4;
+        const unitWidth = )" + QString::number(config->unitWidth()) + R"(;
+        const unitHeight = )" + QString::number(config->unitHeight()) + R"(;
+        const keySpacing = )" + QString::number(config->keySpacing()) + R"(;
         const keys = )" + generateKeyboardJson() + R"(;
         
         function renderKeyboard() {
@@ -190,6 +193,7 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
                 const vk = parseInt(k.dataset.vk);
                 k.classList.toggle('pressed', !!pressed[vk]);
             });
+            
             document.getElementById('kps').textContent = 'KPS: ' + data.kps;
             document.getElementById('total').textContent = 'Total: ' + data.totalKeyPresses;
         }
@@ -354,6 +358,12 @@ void HttpServer::broadcastSse() {
     json["pressed"] = pressed;
     json["kps"] = m_stats->kps();
     json["totalKeyPresses"] = m_stats->totalKeyPresses();
+    
+    QJsonObject keyCounts;
+    for (auto it = m_stats->keyCounts().constBegin(); it != m_stats->keyCounts().constEnd(); ++it) {
+        keyCounts[QString::number(it.key())] = it.value();
+    }
+    json["keyCounts"] = keyCounts;
     
     QJsonDocument doc(json);
     QString data = "data: " + QString::fromUtf8(doc.toJson(QJsonDocument::Compact)) + "\r\n\r\n";

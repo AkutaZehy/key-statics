@@ -82,3 +82,13 @@ QVariantMap KeyStats::getStatsJson() const {
     
     return stats;
 }
+
+void KeyStats::reset() {
+    m_keyCounts.clear();
+    m_pressedKeys.clear();
+    m_recentKeyPressTimes.clear();
+    m_totalKeyPresses = 0;
+    m_kps = 0;
+    m_kpsInstant = 0;
+    emit statsUpdated();
+}

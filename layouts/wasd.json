@@ -1,0 +1,15 @@
+{
+    "name": "WASD+Mouse (6 Keys)",
+    "unitWidth": 80,
+    "unitHeight": 80,
+    "keySpacing": 8,
+    "keys": [
+        { "vkCode": 1, "label": "LC", "row": 0, "col": 0, "width": 1 },
+        { "vkCode": 87, "label": "W", "row": 0, "col": 1, "width": 1 },
+        { "vkCode": 2, "label": "RC", "row": 0, "col": 2, "width": 1 },
+        { "vkCode": 65, "label": "A", "row": 1, "col": 0, "width": 1 },
+        { "vkCode": 83, "label": "S", "row": 1, "col": 1, "width": 1 },
+        { "vkCode": 68, "label": "D", "row": 1, "col": 2, "width": 1 }
+    ]
+}
+

@@ -38,6 +38,7 @@ public:
     const QSet<int>& pressedKeys() const { return m_pressedKeys; }
 
     QVariantMap getStatsJson() const;
+    void reset();
 
 signals:
     void statsUpdated();

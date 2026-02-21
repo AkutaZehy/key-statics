@@ -22,6 +22,9 @@
 #include <QDebug>
 #include <QIcon>
 #include <QDir>
+#include <QMessageBox>
+
+#include "config.h"
 
 SysTray::SysTray(MainWindow* mainWindow, QObject* parent)
     : QObject(parent)
@@ -55,7 +58,10 @@ SysTray::~SysTray() {
 
 void SysTray::createMenu() {
     m_menu = new QMenu();
-
+    m_layoutActions.clear();
+    
+    QMenu* layoutMenu = new QMenu("Switch Layout", m_menu);
+    
     QString layoutDir = QApplication::applicationDirPath() + "/layouts";
     QDir dir(layoutDir);
     QStringList jsonFiles = dir.entryList(QStringList() << "*.json", QDir::Files | QDir::Readable);
@@ -70,18 +76,80 @@ void SysTray::createMenu() {
         for (const QString& fileName : jsonFiles) {
             QString fullPath = layoutDir + "/" + fileName;
             QAction* action = new QAction(fileName, this);
-            connect(action, &QAction::triggered, this, [this, fullPath]() {
+            connect(action, &QAction::triggered, this, [this, fullPath, fileName]() {
                 m_mainWindow->setLayout(fullPath);
+                updateCurrentLayout(fileName);
+                emit layoutChanged(fullPath);
             });
-            m_menu->addAction(action);
+            m_layoutActions[fileName] = action;
+            layoutMenu->addAction(action);
         }
     }
-
+    
+    m_menu->addMenu(layoutMenu);
     m_menu->addSeparator();
-
-    QAction* exitAction = new QAction("退出", this);
+    
+    m_currentLayoutAction = new QAction("Current: --", this);
+    m_currentLayoutAction->setEnabled(false);
+    m_menu->addAction(m_currentLayoutAction);
+    
+    m_menu->addSeparator();
+    
+    QAction* resetAction = new QAction("Reset Stats", this);
+    connect(resetAction, &QAction::triggered, this, &SysTray::requestResetStats);
+    m_menu->addAction(resetAction);
+    
+    m_menu->addSeparator();
+    
+    m_showKeyboardAction = new QAction("Show Keyboard", this);
+    connect(m_showKeyboardAction, &QAction::triggered, this, &SysTray::requestShowKeyboard);
+    m_menu->addAction(m_showKeyboardAction);
+    
+    QAction* previewAction = new QAction("Preview Layout...", this);
+    connect(previewAction, &QAction::triggered, this, &SysTray::requestPreviewLayout);
+    m_menu->addAction(previewAction);
+    
+    m_menu->addSeparator();
+    
+    QAction* aboutAction = new QAction("About", this);
+    connect(aboutAction, &QAction::triggered, this, &SysTray::requestShowAbout);
+    m_menu->addAction(aboutAction);
+    
+    QAction* exitAction = new QAction("Exit", this);
     connect(exitAction, &QAction::triggered, this, &SysTray::onExit);
     m_menu->addAction(exitAction);
+}
+
+void SysTray::refreshMenu() {
+    for (auto it = m_layoutActions.constBegin(); it != m_layoutActions.constEnd(); ++it) {
+        QString fileName = it.key();
+        QAction* action = it.value();
+        if (fileName == m_currentLayout) {
+            action->setText("* " + fileName);
+        } else {
+            action->setText(fileName);
+        }
+    }
+    
+    if (m_currentLayoutAction) {
+        m_currentLayoutAction->setText("Current: " + (m_currentLayout.isEmpty() ? "--" : m_currentLayout));
+    }
+    
+    if (m_showKeyboardAction) {
+        m_showKeyboardAction->setText(m_keyboardVisible ? "Hide Keyboard" : "Show Keyboard");
+    }
+    
+    m_trayIcon->setToolTip(QString("key-statics%1").arg(m_currentLayout.isEmpty() ? "" : QString(" - %1").arg(m_currentLayout)));
+}
+
+void SysTray::updateCurrentLayout(const QString& layoutName) {
+    m_currentLayout = layoutName;
+    refreshMenu();
+}
+
+void SysTray::updateKeyboardVisible(bool visible) {
+    m_keyboardVisible = visible;
+    refreshMenu();
 }
 
 void SysTray::show() {

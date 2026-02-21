@@ -32,9 +32,18 @@ public:
 
     void show();
     void hide();
+    void updateCurrentLayout(const QString& layoutName);
+    void updateKeyboardVisible(bool visible);
+    void refreshMenu();
 
 signals:
     void layoutChanged(const QString& layoutName);
+    void requestShowKeyboard();
+    void requestHideKeyboard();
+    void requestResetStats();
+    void requestPreviewLayout();
+    void requestShowAbout();
+    void requestExit();
 
 public slots:
     void onShowWindow();
@@ -48,6 +57,10 @@ private:
     QSystemTrayIcon* m_trayIcon = nullptr;
     QMenu* m_menu = nullptr;
     QString m_currentLayout;
+    bool m_keyboardVisible = false;
+    QMap<QString, QAction*> m_layoutActions;
+    QAction* m_currentLayoutAction = nullptr;
+    QAction* m_showKeyboardAction = nullptr;
 };
 
 #endif

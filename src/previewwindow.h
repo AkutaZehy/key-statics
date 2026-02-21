@@ -14,59 +14,46 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
-#ifndef MAINWINDOW_H
-#define MAINWINDOW_H
+#ifndef PREVIEWWINDOW_H
+#define PREVIEWWINDOW_H
 
 #include <QMainWindow>
-#include <QCloseEvent>
-#include <QDialog>
-#include <QVBoxLayout>
-#include <QLabel>
+#include <QComboBox>
 #include <QPushButton>
 #include "keyboardhook.h"
 #include "mousehook.h"
 #include "keylayout.h"
 #include "virtualkeyboard.h"
-#include "keystats.h"
-#include "httpserver.h"
-#include "systray.h"
-#include "previewwindow.h"
 
-class MainWindow : public QMainWindow {
+class PreviewWindow : public QMainWindow {
     Q_OBJECT
 
 public:
-    explicit MainWindow(QWidget* parent = nullptr);
-    ~MainWindow();
-
-    void setLayout(const QString& layoutFile);
-
-public slots:
-    void resetStats();
-    void showAbout();
-
-protected:
-    void closeEvent(QCloseEvent* event) override;
+    explicit PreviewWindow(QWidget* parent = nullptr);
+    ~PreviewWindow();
 
 private slots:
+    void onLayoutChanged(int index);
+    void onResetClicked();
     void onKeyPressed(int vkCode);
     void onKeyReleased(int vkCode);
     void onMousePressed(int vkCode);
     void onMouseReleased(int vkCode);
 
 private:
-    bool loadLayout(const QString& layoutFile);
-    void updateLayoutDisplayName(const QString& layoutFile);
+    void loadLayouts();
+    void loadSelectedLayout();
 
+    QComboBox* m_layoutCombo = nullptr;
+    QPushButton* m_resetButton = nullptr;
+    QPushButton* m_closeButton = nullptr;
+    
     KeyboardHook* m_keyboardHook = nullptr;
     MouseHook* m_mouseHook = nullptr;
     KeyLayout* m_layout = nullptr;
     VirtualKeyboard* m_keyboard = nullptr;
-    KeyStats* m_keyStats = nullptr;
-    HttpServer* m_httpServer = nullptr;
-    SysTray* m_sysTray = nullptr;
-    PreviewWindow* m_previewWindow = nullptr;
-    QString m_currentLayoutPath;
+    
+    QStringList m_layoutFiles;
 };
 
 #endif

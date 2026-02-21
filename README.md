@@ -19,13 +19,15 @@
 
 ## Features
 
-- Global keyboard hook capturing all key presses
+- Global keyboard & mouse hook capturing all input
 - Virtual keyboard UI with real-time highlighting
-- HTTP server (port 9876) for OBS Browser Source
+- HTTP server (default port 9876) for OBS Browser Source
 - Multiple keyboard layout support (JSON-based)
 - Key statistics (KPS, total presses)
 - System tray icon with layout switching
 - Background execution (no visible window)
+- Mouse button support (left, right, middle, X1, X2)
+- Preview tool for testing layouts
 
 ## Quick Start
 
@@ -44,10 +46,75 @@ The keyboard overlay will display key presses in real-time.
 
 - **104keys.json** - Full-size 104-key keyboard
 - **dfjk.json** - Minimal DFJK layout (4 keys)
+- **dfjk-mouse.json** - DFJK layout with mouse buttons
 
 ### Switching Layouts
 
 Right-click the system tray icon to switch between available layouts.
+
+## Configuration File
+
+Create a `config.json` file in the same directory as `key-statics.exe`:
+
+```json
+{
+    "server": {
+        "port": 9876,
+        "autoPortIfOccupied": true
+    },
+    "display": {
+        "unitWidth": 40,
+        "unitHeight": 40,
+        "keySpacing": 4,
+        "backgroundColor": "#282828",
+        "keyColor": "#444444",
+        "keyActiveColor": "#0096FF",
+        "fontFamily": "monospace"
+    },
+    "layout": {
+        "default": "104keys"
+    }
+}
+```
+
+### Configuration Fields
+
+| Section | Field | Description |
+|---------|-------|-------------|
+| server | port | HTTP server port (default: 9876) |
+| server | autoPortIfOccupied | Auto-select port if occupied |
+| display | unitWidth | Key width in pixels |
+| display | unitHeight | Key height in pixels |
+| display | keySpacing | Gap between keys in pixels |
+| display | backgroundColor | Background color (hex) |
+| display | keyColor | Key background color (hex) |
+| display | keyActiveColor | Key active/pressed color (hex) |
+| display | fontFamily | Font family for key labels |
+| layout | default | Default layout filename |
+
+## Mouse Support
+
+The application supports mouse button input. Add mouse keys to your layout:
+
+```json
+{
+    "keys": [
+        {"vkCode": 1, "label": "L", "row": 0, "col": 0},
+        {"vkCode": 2, "label": "R", "row": 0, "col": 1},
+        {"vkCode": 4, "label": "M", "row": 0, "col": 2}
+    ]
+}
+```
+
+### Mouse Virtual Key Codes
+
+| Key | Code |
+|-----|------|
+| Left Button | 1 |
+| Right Button | 2 |
+| Middle Button | 4 |
+| X1 | 5 |
+| X2 | 6 |
 
 ## Custom Keyboard Layouts
 
@@ -116,6 +183,30 @@ Create a JSON file in the `layouts/` folder:
 | `/` | Main HTML page with keyboard overlay |
 | `/events` | Server-Sent Events stream for real-time key updates |
 
+## System Tray Menu
+
+Right-click the system tray icon to access:
+
+- **Switch Layout** - Choose from available layouts (current marked with *)
+- **Current** - Shows currently active layout
+- **Reset Stats** - Reset key press counters
+- **Show/Hide Keyboard** - Toggle overlay window visibility
+- **Preview Layout** - Open layout preview tool
+- **About** - Application info
+- **Exit** - Exit application
+
+## Preview Tool
+
+The preview tool allows you to test layouts without running the main OBS integration:
+
+1. Click **Preview Layout** from the system tray menu
+2. A separate window will open showing the keyboard
+3. Your key presses will be highlighted in real-time
+4. Use the dropdown to switch between different layouts
+5. Click **Reset** to clear pressed key states
+
+This is useful for verifying your custom layout bindings before using them in OBS.
+
 ## Building from Source
 
 ### Prerequisites
@@ -149,7 +240,7 @@ You should have received a copy of the GNU General Public License along with thi
 
 ### Acknowledgments
 
-- [Qt Framework](https://www.qt.io/) - Cross-platform UI framework (LGPL)
+- [Qt Framework](https://www.qt.io/) - Cross-platform UI framework (GPL)
 - [Krita](https://krita.org/) - Digital painting application used for icon design
 - Windows Hook API for global keyboard capture
 
