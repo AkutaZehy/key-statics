@@ -65,6 +65,10 @@ void VirtualKeyboard::setLayout(KeyLayout* layout) {
         int h = maxY + 30;
         resize(w, h);
     }
+    // Our sizeHint changed: invalidate the cached hints of parent layouts,
+    // otherwise adjustSize() on the owning window computes from the stale
+    // value and the new layout gets clipped.
+    updateGeometry();
     update();
 }
 
