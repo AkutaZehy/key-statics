@@ -30,7 +30,6 @@
 - Mouse motion gauge: a velocity vector meter placeable like a key
 - Gamepad (XInput) support: buttons as keys, analog trigger bars
 - Layout hot reload: edit JSON while running, sources update live
-- Auto-switch layouts when a configured game gets focus
 - Preview tool for testing layouts
 - Privacy by default: the server listens on 127.0.0.1 only
 
@@ -117,7 +116,6 @@ Create a `config.json` file in the same directory as `key-statics.exe`:
 | display | fontFamily | Font family for key labels |
 | display | gaugeMaxSpeed | Mouse speed in px/s that fully deflects the motion gauge (default: 3000) |
 | layout | default | Default layout filename |
-| layout | autoSwitch | Process-name / layout pairs for focus-based switching |
 | gamepad | enabled | Poll an XInput controller (default: true) |
 | gamepad | userIndex | XInput controller slot 0-3 (default: 0) |
 
@@ -217,28 +215,6 @@ tray menu and the preview dropdown immediately, and saving the currently
 active layout reloads it in place. A file that fails to parse (for example
 while the editor is halfway through writing) is ignored and the last good
 layout stays on screen; browser sources are told to refresh themselves.
-
-## Auto-Switch Layouts
-
-`layout.autoSwitch` pairs a process name fragment with a layout name
-(without extension). While a matching application has focus its layout is
-active; when focus moves elsewhere the default layout returns:
-
-```json
-{
-    "layout": {
-        "default": "104keys",
-        "autoSwitch": [
-            {"process": "osu!", "layout": "dfjk"},
-            {"process": "eurotrucks2", "layout": "wasd"}
-        ]
-    }
-}
-```
-
-Matching is case-insensitive against the executable file name
-(`eurotrucks2` matches `EuroTrucks2.exe`); the first rule that matches
-wins and is re-checked once per second.
 
 ## Custom Keyboard Layouts
 

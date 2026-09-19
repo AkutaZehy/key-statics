@@ -40,7 +40,7 @@ private slots:
     void invalidJsonUsesDefaults();
     void loadCustomValues();
     void saveRoundtrip();
-    void autoSwitchRules();
+    void gamepadConfig();
 
 private:
     QTemporaryDir m_dir;
@@ -120,27 +120,21 @@ void TestConfig::saveRoundtrip() {
     QCOMPARE(Config::instance()->defaultLayout(), QString("dfjk"));
 }
 
-void TestConfig::autoSwitchRules() {
-    QString path = m_dir.path() + "/autoswitch.json";
+void TestConfig::gamepadConfig() {
+    QString path = m_dir.path() + "/gamepad.json";
     QVERIFY(writeTempFile(path, R"({
-        "layout": {
-            "default": "104keys",
-            "autoSwitch": [
-                {"process": "osu!", "layout": "dfjk"},
-                {"process": "eurotrucks2", "layout": "wasd"}
-            ]
-        },
         "gamepad": {"enabled": false, "userIndex": 2}
     })"));
 
     Config::instance()->load(path);
 
-    QCOMPARE(Config::instance()->autoSwitchRules().size(), 2);
-    QCOMPARE(Config::instance()->matchAutoSwitch(QString("osu!.exe")), QString("dfjk"));
-    QCOMPARE(Config::instance()->matchAutoSwitch(QString("EuroTrucks2.exe")), QString("wasd"));
-    QCOMPARE(Config::instance()->matchAutoSwitch(QString("notepad.exe")), QString());
     QCOMPARE(Config::instance()->gamepadEnabled(), false);
     QCOMPARE(Config::instance()->gamepadUserIndex(), 2);
+
+    // Out-of-range user index is clamped back to slot 0.
+    QVERIFY(writeTempFile(path, R"({"gamepad": {"userIndex": 9}})"));
+    Config::instance()->load(path);
+    QCOMPARE(Config::instance()->gamepadUserIndex(), 0);
 }
 
 QTEST_MAIN(TestConfig)

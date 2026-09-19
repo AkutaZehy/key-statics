@@ -60,13 +60,6 @@ MainWindow::MainWindow(QWidget* parent)
         qWarning() << "Failed to load default layout:" << defaultPath;
     }
 
-    if (!Config::instance()->autoSwitchRules().isEmpty()) {
-        m_autoSwitchTimer = new QTimer(this);
-        m_autoSwitchTimer->setInterval(1000);
-        connect(m_autoSwitchTimer, &QTimer::timeout, this, &MainWindow::onAutoSwitchTick);
-        m_autoSwitchTimer->start();
-    }
-
     // Low-level hooks live on a dedicated thread: if the GUI thread ever
     // stalls, Windows would otherwise silently drop the system-wide hooks
     // after a timeout and stats would stop without any error.
@@ -207,31 +200,6 @@ void MainWindow::setLayout(const QString& layoutFile) {
     m_layoutManager->loadLayout(layoutFile);
 }
 
-void MainWindow::onAutoSwitchTick() {
-    const QVector<QPair<QString, QString>> rules = Config::instance()->autoSwitchRules();
-    if (rules.isEmpty()) {
-        return;
-    }
-
-    const QString exe = foregroundProcessName();
-    if (exe.isEmpty()) {
-        return;
-    }
-
-    const QString layoutName = Config::instance()->matchAutoSwitch(exe);
-    if (!layoutName.isEmpty()) {
-        const QString target = resolveLayoutPath(layoutName);
-        if (!target.isEmpty() && target != m_layoutManager->currentLayoutPath()) {
-            m_layoutManager->loadLayout(target);
-        }
-        m_autoSwitchedAway = true;
-    } else if (m_autoSwitchedAway) {
-        // Focus left every configured game: fall back to the default layout.
-        m_layoutManager->loadLayout(resolveLayoutPath(Config::instance()->defaultLayout()));
-        m_autoSwitchedAway = false;
-    }
-}
-
 QString MainWindow::resolveLayoutPath(const QString& layoutName) const {
     QString name = layoutName;
     if (name.endsWith(".json", Qt::CaseInsensitive)) {
@@ -243,34 +211,6 @@ QString MainWindow::resolveLayoutPath(const QString& layoutName) const {
         return path;
     }
     return dir + "104keys.json";
-}
-
-QString MainWindow::foregroundProcessName() const {
-#ifdef _WIN32
-    HWND hwnd = GetForegroundWindow();
-    if (!hwnd) {
-        return QString();
-    }
-    DWORD pid = 0;
-    GetWindowThreadProcessId(hwnd, &pid);
-    if (pid == 0) {
-        return QString();
-    }
-    HANDLE handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
-    if (!handle) {
-        return QString();
-    }
-    wchar_t path[MAX_PATH] = {};
-    DWORD size = MAX_PATH;
-    QString result;
-    if (QueryFullProcessImageNameW(handle, 0, path, &size) && size > 0) {
-        result = QFileInfo(QString::fromWCharArray(path, static_cast<int>(size))).fileName();
-    }
-    CloseHandle(handle);
-    return result;
-#else
-    return QString();
-#endif
 }
 
 void MainWindow::updateLayoutDisplayName(const QString& layoutFile) {

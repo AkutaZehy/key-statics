@@ -18,7 +18,6 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
-#include <QJsonArray>
 #include <QDebug>
 #include <QApplication>
 
@@ -101,17 +100,6 @@ void Config::loadFromJson(const QJsonObject& json) {
     if (json.contains("layout")) {
         QJsonObject layout = json["layout"].toObject();
         m_defaultLayout = layout["default"].toString("104keys");
-
-        m_autoSwitchRules.clear();
-        const QJsonArray rules = layout["autoSwitch"].toArray();
-        for (const QJsonValue& value : rules) {
-            QJsonObject rule = value.toObject();
-            QString process = rule["process"].toString().trimmed();
-            QString layoutName = rule["layout"].toString().trimmed();
-            if (!process.isEmpty() && !layoutName.isEmpty()) {
-                m_autoSwitchRules.append(qMakePair(process, layoutName));
-            }
-        }
     }
 
     if (json.contains("gamepad")) {
@@ -122,15 +110,6 @@ void Config::loadFromJson(const QJsonObject& json) {
             m_gamepadUserIndex = 0;
         }
     }
-}
-
-QString Config::matchAutoSwitch(const QString& exeBaseName) const {
-    for (const auto& rule : m_autoSwitchRules) {
-        if (exeBaseName.contains(rule.first, Qt::CaseInsensitive)) {
-            return rule.second;
-        }
-    }
-    return QString();
 }
 
 void Config::save(const QString& filePath) {
@@ -174,16 +153,6 @@ QJsonObject Config::saveToJson() const {
     
     QJsonObject layout;
     layout["default"] = m_defaultLayout;
-    QJsonArray rules;
-    for (const auto& rule : m_autoSwitchRules) {
-        QJsonObject ruleJson;
-        ruleJson["process"] = rule.first;
-        ruleJson["layout"] = rule.second;
-        rules.append(ruleJson);
-    }
-    if (!rules.isEmpty()) {
-        layout["autoSwitch"] = rules;
-    }
     json["layout"] = layout;
 
     QJsonObject gamepad;

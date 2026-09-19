@@ -20,8 +20,6 @@
 #include <QObject>
 #include <QString>
 #include <QJsonObject>
-#include <QPair>
-#include <QVector>
 
 class Config : public QObject {
     Q_OBJECT
@@ -46,14 +44,8 @@ public:
     int gaugeMaxSpeed() const { return m_gaugeMaxSpeed; }
 
     QString defaultLayout() const { return m_defaultLayout; }
-    // (process substring, layout name without extension), order = priority
-    QVector<QPair<QString, QString>> autoSwitchRules() const { return m_autoSwitchRules; }
     bool gamepadEnabled() const { return m_gamepadEnabled; }
     int gamepadUserIndex() const { return m_gamepadUserIndex; }
-
-    // Returns the layout name (without extension) whose process substring
-    // matches exeBaseName, or an empty string. First rule wins.
-    QString matchAutoSwitch(const QString& exeBaseName) const;
 
     void setServerPort(quint16 port) { m_serverPort = port; }
     void setDefaultLayout(const QString& layout) { m_defaultLayout = layout; }
@@ -80,7 +72,6 @@ private:
     int m_gaugeMaxSpeed = 3000;
 
     QString m_defaultLayout = "104keys";
-    QVector<QPair<QString, QString>> m_autoSwitchRules;
     bool m_gamepadEnabled = true;
     int m_gamepadUserIndex = 0;
 };
