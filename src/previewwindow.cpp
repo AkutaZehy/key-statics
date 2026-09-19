@@ -39,12 +39,14 @@ PreviewWindow::PreviewWindow(QWidget* parent)
     m_layoutCombo = new QComboBox(this);
     m_resetButton = new QPushButton("Reset", this);
     m_closeButton = new QPushButton("Close", this);
-    
+    m_lastInputLabel = new QLabel("Last input: --", this);
+
     topLayout->addWidget(layoutLabel);
     topLayout->addWidget(m_layoutCombo);
     topLayout->addWidget(m_resetButton);
     topLayout->addWidget(m_closeButton);
     topLayout->addStretch();
+    topLayout->addWidget(m_lastInputLabel);
     
     m_layout = new KeyLayout(this);
     m_keyboard = new VirtualKeyboard(this);
@@ -107,6 +109,7 @@ void PreviewWindow::onResetClicked() {
 
 void PreviewWindow::onKeyPressed(int vkCode) {
     m_keyboard->onKeyPressed(vkCode);
+    updateLastInputLabel(vkCode);
 }
 
 void PreviewWindow::onKeyReleased(int vkCode) {
@@ -115,8 +118,17 @@ void PreviewWindow::onKeyReleased(int vkCode) {
 
 void PreviewWindow::onMousePressed(int vkCode) {
     m_keyboard->onKeyPressed(vkCode);
+    updateLastInputLabel(vkCode);
 }
 
 void PreviewWindow::onMouseReleased(int vkCode) {
     m_keyboard->onKeyReleased(vkCode);
+}
+
+void PreviewWindow::updateLastInputLabel(int vkCode) {
+    const QString label = m_layout ? m_layout->getKeyLabel(vkCode) : QString();
+    const QString text = label.isEmpty()
+        ? QString("vk %1").arg(vkCode)
+        : QString("%1 (vk %2)").arg(label).arg(vkCode);
+    m_lastInputLabel->setText("Last input: " + text);
 }

@@ -39,15 +39,32 @@ MainWindow::MainWindow(QWidget* parent)
 
     m_keyStats = new KeyStats(this);
 
-    QString defaultLayout = Config::instance()->defaultLayout();
-    QString layoutPath = QApplication::applicationDirPath() + "/layouts/" + defaultLayout + ".json";
-    
-    if (!QFileInfo::exists(layoutPath)) {
-        layoutPath = QApplication::applicationDirPath() + "/layouts/104keys.json";
+    // Layouts: directory scan + watcher-driven hot reload. All loads (initial,
+    // tray, auto-switch) go through the manager; side effects apply in
+    // onLayoutLoaded.
+    m_layoutManager = new LayoutManager(this);
+    m_layoutManager->bindLayout(m_layout);
+    m_layoutManager->setLayoutDir(QApplication::applicationDirPath() + "/layouts");
+    connect(m_layoutManager, &LayoutManager::layoutLoaded, this, &MainWindow::onLayoutLoaded);
+    connect(m_layoutManager, &LayoutManager::layoutListChanged, this, [this]() {
+        if (m_sysTray) {
+            m_sysTray->setLayoutFiles(m_layoutManager->availableLayouts());
+        }
+    });
+    connect(m_layoutManager, &LayoutManager::layoutLoadFailed, this, [](const QString& path) {
+        qWarning() << "Layout load failed, keeping previous layout:" << path;
+    });
+
+    const QString defaultPath = resolveLayoutPath(Config::instance()->defaultLayout());
+    if (!m_layoutManager->loadLayout(defaultPath)) {
+        qWarning() << "Failed to load default layout:" << defaultPath;
     }
-    
-    if (!loadLayout(layoutPath)) {
-        qWarning() << "Failed to load keyboard layout!";
+
+    if (!Config::instance()->autoSwitchRules().isEmpty()) {
+        m_autoSwitchTimer = new QTimer(this);
+        m_autoSwitchTimer->setInterval(1000);
+        connect(m_autoSwitchTimer, &QTimer::timeout, this, &MainWindow::onAutoSwitchTick);
+        m_autoSwitchTimer->start();
     }
 
     // Low-level hooks live on a dedicated thread: if the GUI thread ever
@@ -72,6 +89,17 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_mouseHook, &MouseHook::buttonReleased, this, &MainWindow::onMouseReleased);
     connect(m_mouseHook, &MouseHook::mouseMoved, this, &MainWindow::onMouseMoved);
 
+    if (Config::instance()->gamepadEnabled()) {
+        m_gamepadPoller = new GamepadPoller();
+        m_gamepadPoller->moveToThread(m_hookThread);
+        connect(m_hookThread, &QThread::started, m_gamepadPoller, [this]() {
+            m_gamepadPoller->start(Config::instance()->gamepadUserIndex());
+        });
+        connect(m_gamepadPoller, &GamepadPoller::buttonPressed, this, &MainWindow::onMousePressed);
+        connect(m_gamepadPoller, &GamepadPoller::buttonReleased, this, &MainWindow::onMouseReleased);
+        connect(m_gamepadPoller, &GamepadPoller::axesChanged, this, &MainWindow::onGamepadAxes);
+    }
+
     m_hookThread->start();
 
     m_httpServer = new HttpServer(m_keyStats, this);
@@ -85,7 +113,9 @@ MainWindow::MainWindow(QWidget* parent)
     }
 
     m_sysTray = new SysTray(this, this);
-    
+    m_sysTray->setLayoutFiles(m_layoutManager->availableLayouts());
+    m_sysTray->updateCurrentLayout(QFileInfo(m_currentLayoutPath).fileName());
+
     connect(m_sysTray, &SysTray::requestResetStats, this, &MainWindow::resetStats);
     connect(m_sysTray, &SysTray::requestShowAbout, this, &MainWindow::showAbout);
     connect(m_sysTray, &SysTray::requestShowKeyboard, this, [this]() { 
@@ -104,12 +134,18 @@ MainWindow::MainWindow(QWidget* parent)
             connect(m_keyboardHook, &KeyboardHook::keyReleased, m_previewWindow, &PreviewWindow::onKeyReleased);
             connect(m_mouseHook, &MouseHook::buttonPressed, m_previewWindow, &PreviewWindow::onMousePressed);
             connect(m_mouseHook, &MouseHook::buttonReleased, m_previewWindow, &PreviewWindow::onMouseReleased);
+            if (m_gamepadPoller) {
+                connect(m_gamepadPoller, &GamepadPoller::buttonPressed, m_previewWindow, &PreviewWindow::onMousePressed);
+                connect(m_gamepadPoller, &GamepadPoller::buttonReleased, m_previewWindow, &PreviewWindow::onMouseReleased);
+                connect(m_gamepadPoller, &GamepadPoller::axesChanged, m_previewWindow, &PreviewWindow::onGamepadAxes);
+            }
+            connect(m_layoutManager, &LayoutManager::layoutListChanged, m_previewWindow, &PreviewWindow::refreshLayouts);
         }
         m_previewWindow->show();
     });
     connect(m_sysTray, &SysTray::layoutChanged, this, &MainWindow::updateLayoutDisplayName);
-    
-    updateLayoutDisplayName(layoutPath);
+
+    updateLayoutDisplayName(m_currentLayoutPath);
 }
 
 MainWindow::~MainWindow() {
@@ -120,6 +156,9 @@ MainWindow::~MainWindow() {
         if (m_mouseHook) {
             QMetaObject::invokeMethod(m_mouseHook, "stop", Qt::BlockingQueuedConnection);
         }
+        if (m_gamepadPoller) {
+            QMetaObject::invokeMethod(m_gamepadPoller, "stop", Qt::BlockingQueuedConnection);
+        }
         m_hookThread->quit();
         m_hookThread->wait();
     }
@@ -129,32 +168,109 @@ MainWindow::~MainWindow() {
 }
 
 bool MainWindow::loadLayout(const QString& layoutFile) {
-    if (m_layout->loadFromFile(layoutFile)) {
-        if (m_keyboard) {
-            m_keyboard->setLayout(m_layout);
-            adjustSize();
-        }
-        if (m_keyStats) {
-            QSet<int> validKeys;
-            for (int vk : m_layout->keys().keys()) {
-                validKeys.insert(vk);
-            }
-            m_keyStats->setValidKeys(validKeys);
-        }
-        
-        if (m_httpServer) {
-            m_httpServer->setLayout(m_layout);
-        }
-        
-        return true;
+    // Side effects only: LayoutManager already parsed the file into
+    // m_layout (and only on a fully successful parse).
+    if (m_keyboard) {
+        m_keyboard->setLayout(m_layout);
+        adjustSize();
     }
-    return false;
+    if (m_keyStats) {
+        QSet<int> validKeys;
+        for (int vk : m_layout->keys().keys()) {
+            validKeys.insert(vk);
+        }
+        m_keyStats->setValidKeys(validKeys);
+    }
+
+    if (m_httpServer) {
+        m_httpServer->setLayout(m_layout);
+    }
+
+    m_currentLayoutPath = layoutFile;
+    return true;
+}
+
+void MainWindow::onLayoutLoaded(const QString& path) {
+    loadLayout(path);
+
+    if (m_sysTray) {
+        m_sysTray->updateCurrentLayout(QFileInfo(path).fileName());
+        m_sysTray->refreshMenu();
+    }
+    // Browser sources refetch the page when the layout changed on disk.
+    if (m_httpServer) {
+        m_httpServer->notifyLayoutChanged();
+    }
 }
 
 void MainWindow::setLayout(const QString& layoutFile) {
-    m_currentLayoutPath = layoutFile;
-    loadLayout(layoutFile);
-    updateLayoutDisplayName(layoutFile);
+    m_layoutManager->loadLayout(layoutFile);
+}
+
+void MainWindow::onAutoSwitchTick() {
+    const QVector<QPair<QString, QString>> rules = Config::instance()->autoSwitchRules();
+    if (rules.isEmpty()) {
+        return;
+    }
+
+    const QString exe = foregroundProcessName();
+    if (exe.isEmpty()) {
+        return;
+    }
+
+    const QString layoutName = Config::instance()->matchAutoSwitch(exe);
+    if (!layoutName.isEmpty()) {
+        const QString target = resolveLayoutPath(layoutName);
+        if (!target.isEmpty() && target != m_layoutManager->currentLayoutPath()) {
+            m_layoutManager->loadLayout(target);
+        }
+        m_autoSwitchedAway = true;
+    } else if (m_autoSwitchedAway) {
+        // Focus left every configured game: fall back to the default layout.
+        m_layoutManager->loadLayout(resolveLayoutPath(Config::instance()->defaultLayout()));
+        m_autoSwitchedAway = false;
+    }
+}
+
+QString MainWindow::resolveLayoutPath(const QString& layoutName) const {
+    QString name = layoutName;
+    if (name.endsWith(".json", Qt::CaseInsensitive)) {
+        name.chop(5);
+    }
+    const QString dir = QApplication::applicationDirPath() + "/layouts/";
+    const QString path = dir + name + ".json";
+    if (QFileInfo::exists(path)) {
+        return path;
+    }
+    return dir + "104keys.json";
+}
+
+QString MainWindow::foregroundProcessName() const {
+#ifdef _WIN32
+    HWND hwnd = GetForegroundWindow();
+    if (!hwnd) {
+        return QString();
+    }
+    DWORD pid = 0;
+    GetWindowThreadProcessId(hwnd, &pid);
+    if (pid == 0) {
+        return QString();
+    }
+    HANDLE handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+    if (!handle) {
+        return QString();
+    }
+    wchar_t path[MAX_PATH] = {};
+    DWORD size = MAX_PATH;
+    QString result;
+    if (QueryFullProcessImageNameW(handle, 0, path, &size) && size > 0) {
+        result = QFileInfo(QString::fromWCharArray(path, static_cast<int>(size))).fileName();
+    }
+    CloseHandle(handle);
+    return result;
+#else
+    return QString();
+#endif
 }
 
 void MainWindow::updateLayoutDisplayName(const QString& layoutFile) {
@@ -212,6 +328,18 @@ void MainWindow::onMouseMoved(int dx, int dy) {
     }
     if (m_previewWindow) {
         m_previewWindow->onMouseMotion(dx, dy);
+    }
+}
+
+void MainWindow::onGamepadAxes(int lt, int rt, int lx, int ly, int rx, int ry) {
+    if (m_keyStats) {
+        m_keyStats->recordGamepadAxes(lt, rt, lx, ly, rx, ry);
+    }
+    if (m_keyboard) {
+        m_keyboard->onGamepadAxes(lt, rt, lx, ly, rx, ry);
+    }
+    if (m_previewWindow) {
+        m_previewWindow->onGamepadAxes(lt, rt, lx, ly, rx, ry);
     }
 }
 

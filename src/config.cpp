@@ -18,6 +18,7 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QJsonArray>
 #include <QDebug>
 #include <QApplication>
 
@@ -84,7 +85,7 @@ void Config::loadFromJson(const QJsonObject& json) {
         m_autoPortIfOccupied = server["autoPortIfOccupied"].toBool(true);
         m_allowRemoteAccess = server["allowRemoteAccess"].toBool(false);
     }
-    
+
     if (json.contains("display")) {
         QJsonObject display = json["display"].toObject();
         m_unitWidth = display["unitWidth"].toInt(40);
@@ -96,11 +97,40 @@ void Config::loadFromJson(const QJsonObject& json) {
         m_fontFamily = display["fontFamily"].toString("monospace");
         m_gaugeMaxSpeed = display["gaugeMaxSpeed"].toInt(3000);
     }
-    
+
     if (json.contains("layout")) {
         QJsonObject layout = json["layout"].toObject();
         m_defaultLayout = layout["default"].toString("104keys");
+
+        m_autoSwitchRules.clear();
+        const QJsonArray rules = layout["autoSwitch"].toArray();
+        for (const QJsonValue& value : rules) {
+            QJsonObject rule = value.toObject();
+            QString process = rule["process"].toString().trimmed();
+            QString layoutName = rule["layout"].toString().trimmed();
+            if (!process.isEmpty() && !layoutName.isEmpty()) {
+                m_autoSwitchRules.append(qMakePair(process, layoutName));
+            }
+        }
     }
+
+    if (json.contains("gamepad")) {
+        QJsonObject gamepad = json["gamepad"].toObject();
+        m_gamepadEnabled = gamepad["enabled"].toBool(true);
+        m_gamepadUserIndex = gamepad["userIndex"].toInt(0);
+        if (m_gamepadUserIndex < 0 || m_gamepadUserIndex > 3) {
+            m_gamepadUserIndex = 0;
+        }
+    }
+}
+
+QString Config::matchAutoSwitch(const QString& exeBaseName) const {
+    for (const auto& rule : m_autoSwitchRules) {
+        if (exeBaseName.contains(rule.first, Qt::CaseInsensitive)) {
+            return rule.second;
+        }
+    }
+    return QString();
 }
 
 void Config::save(const QString& filePath) {
@@ -144,7 +174,22 @@ QJsonObject Config::saveToJson() const {
     
     QJsonObject layout;
     layout["default"] = m_defaultLayout;
+    QJsonArray rules;
+    for (const auto& rule : m_autoSwitchRules) {
+        QJsonObject ruleJson;
+        ruleJson["process"] = rule.first;
+        ruleJson["layout"] = rule.second;
+        rules.append(ruleJson);
+    }
+    if (!rules.isEmpty()) {
+        layout["autoSwitch"] = rules;
+    }
     json["layout"] = layout;
-    
+
+    QJsonObject gamepad;
+    gamepad["enabled"] = m_gamepadEnabled;
+    gamepad["userIndex"] = m_gamepadUserIndex;
+    json["gamepad"] = gamepad;
+
     return json;
 }

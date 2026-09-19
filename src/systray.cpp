@@ -22,6 +22,7 @@
 #include <QDebug>
 #include <QIcon>
 #include <QDir>
+#include <QFileInfo>
 #include <QMessageBox>
 
 #include "config.h"
@@ -58,35 +59,11 @@ SysTray::~SysTray() {
 
 void SysTray::createMenu() {
     m_menu = new QMenu();
-    m_layoutActions.clear();
-    
-    QMenu* layoutMenu = new QMenu("Switch Layout", m_menu);
-    
-    QString layoutDir = QApplication::applicationDirPath() + "/layouts";
-    QDir dir(layoutDir);
-    QStringList jsonFiles = dir.entryList(QStringList() << "*.json", QDir::Files | QDir::Readable);
 
-    if (jsonFiles.isEmpty()) {
-        QString defaultFile = layoutDir + "/104keys.json";
-        QFile file(defaultFile);
-        if (!file.exists()) {
-            qWarning() << "No layout files found!";
-        }
-    } else {
-        for (const QString& fileName : jsonFiles) {
-            QString fullPath = layoutDir + "/" + fileName;
-            QAction* action = new QAction(fileName, this);
-            connect(action, &QAction::triggered, this, [this, fullPath, fileName]() {
-                m_mainWindow->setLayout(fullPath);
-                updateCurrentLayout(fileName);
-                emit layoutChanged(fullPath);
-            });
-            m_layoutActions[fileName] = action;
-            layoutMenu->addAction(action);
-        }
-    }
-    
-    m_menu->addMenu(layoutMenu);
+    m_layoutMenu = new QMenu("Switch Layout", m_menu);
+    rebuildLayoutMenu();
+
+    m_menu->addMenu(m_layoutMenu);
     m_menu->addSeparator();
     
     m_currentLayoutAction = new QAction("Current: --", this);
@@ -118,6 +95,29 @@ void SysTray::createMenu() {
     QAction* exitAction = new QAction("Exit", this);
     connect(exitAction, &QAction::triggered, this, &SysTray::onExit);
     m_menu->addAction(exitAction);
+}
+
+void SysTray::setLayoutFiles(const QStringList& layoutPaths) {
+    m_layoutFiles = layoutPaths;
+    rebuildLayoutMenu();
+    refreshMenu();
+}
+
+void SysTray::rebuildLayoutMenu() {
+    m_layoutActions.clear();
+    m_layoutMenu->clear();
+
+    for (const QString& fullPath : m_layoutFiles) {
+        QString fileName = QFileInfo(fullPath).fileName();
+        QAction* action = new QAction(fileName, m_layoutMenu);
+        connect(action, &QAction::triggered, this, [this, fullPath, fileName]() {
+            m_mainWindow->setLayout(fullPath);
+            updateCurrentLayout(fileName);
+            emit layoutChanged(fullPath);
+        });
+        m_layoutActions[fileName] = action;
+        m_layoutMenu->addAction(action);
+    }
 }
 
 void SysTray::refreshMenu() {

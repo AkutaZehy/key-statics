@@ -35,6 +35,9 @@ public:
     bool start(quint16 port = 9876);
     void stop();
     void setLayout(KeyLayout* layout);
+    // Pushes a named "reload" SSE event so connected browser sources refetch
+    // the page after the layout changed on disk.
+    void notifyLayoutChanged();
 
 private slots:
     void onNewConnection();

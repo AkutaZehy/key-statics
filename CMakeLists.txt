@@ -17,20 +17,25 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network)
 set(HEADERS
     src/keyboardhook.h
     src/mousehook.h
+    src/gamepadpoller.h
     src/keylayout.h
+    src/layoutmanager.h
     src/virtualkeyboard.h
     src/mainwindow.h
     src/systray.h
     src/keystats.h
     src/httpserver.h
     src/config.h
+    src/inputconsts.h
     src/previewwindow.h
 )
 
 set(SOURCES
     src/keyboardhook.cpp
     src/mousehook.cpp
+    src/gamepadpoller.cpp
     src/keylayout.cpp
+    src/layoutmanager.cpp
     src/virtualkeyboard.cpp
     src/mainwindow.cpp
     src/systray.cpp

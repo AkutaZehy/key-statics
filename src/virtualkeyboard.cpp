@@ -109,6 +109,16 @@ void VirtualKeyboard::decayGauge() {
     update();
 }
 
+void VirtualKeyboard::onGamepadAxes(int lt, int rt, int lx, int ly, int rx, int ry) {
+    Q_UNUSED(lx);
+    Q_UNUSED(ly);
+    Q_UNUSED(rx);
+    Q_UNUSED(ry);
+    m_padLt = lt;
+    m_padRt = rt;
+    update();
+}
+
 void VirtualKeyboard::drawGauge(QPainter* painter, const QRect& rect) const {
     painter->save();
 
@@ -158,6 +168,46 @@ void VirtualKeyboard::drawGauge(QPainter* painter, const QRect& rect) const {
     painter->restore();
 }
 
+void VirtualKeyboard::drawTriggerBars(QPainter* painter, const QRect& rect) const {
+    painter->save();
+
+    painter->setBrush(m_keyNormalColor);
+    painter->setPen(m_keyBorderColor);
+    painter->drawRoundedRect(rect, 8, 8);
+
+    const int pad = 10;
+    const int barWidth = (rect.width() - pad * 3) / 2;
+    const int usableHeight = rect.height() - pad * 2 - 14;
+
+    QFont font = painter->font();
+    font.setPixelSize(11);
+    painter->setFont(font);
+
+    const int triggers[2] = {m_padLt, m_padRt};
+    const QString labels[2] = {"LT", "RT"};
+    for (int i = 0; i < 2; ++i) {
+        const int x = rect.left() + pad + i * (barWidth + pad);
+        const int trackTop = rect.top() + pad;
+        const int trackHeight = usableHeight;
+
+        painter->setPen(QPen(m_keyBorderColor, 1));
+        painter->setBrush(QColor(0, 0, 0, 80));
+        painter->drawRoundedRect(QRect(x, trackTop, barWidth, trackHeight), 4, 4);
+
+        const int fillHeight = qBound(0, triggers[i] * trackHeight / 255, trackHeight);
+        if (fillHeight > 0) {
+            painter->setBrush(m_keyPressedColor);
+            painter->setPen(Qt::NoPen);
+            painter->drawRoundedRect(QRect(x, trackTop + trackHeight - fillHeight, barWidth, fillHeight), 4, 4);
+        }
+
+        painter->setPen(m_textColor);
+        painter->drawText(QRect(x, trackTop + trackHeight + 2, barWidth, 12), Qt::AlignCenter, labels[i]);
+    }
+
+    painter->restore();
+}
+
 void VirtualKeyboard::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
     QPainter painter(this);
@@ -176,6 +226,8 @@ void VirtualKeyboard::paintEvent(QPaintEvent* event) {
         if (info.isVirtualElement()) {
             if (info.vkCode == VK_GAUGE_MOUSE_VELOCITY) {
                 drawGauge(&painter, rect);
+            } else if (info.vkCode == VK_GAUGE_GAMEPAD_TRIGGERS) {
+                drawTriggerBars(&painter, rect);
             }
             ++it;
             continue;

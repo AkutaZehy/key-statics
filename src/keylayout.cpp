@@ -30,6 +30,30 @@ KeyLayout::KeyLayout(QObject* parent)
 }
 
 bool KeyLayout::loadFromFile(const QString& filePath) {
+    // Parse into locals first: on failure the currently active layout must
+    // stay untouched (hot reload keeps serving the last good layout).
+    QString parsedName;
+    QMap<int, KeyInfo> parsedKeys;
+    int parsedUnitWidth = 40;
+    int parsedUnitHeight = 40;
+    int parsedKeySpacing = 4;
+
+    if (!parseFile(filePath, parsedName, parsedKeys, parsedUnitWidth, parsedUnitHeight, parsedKeySpacing)) {
+        return false;
+    }
+
+    m_name = parsedName;
+    m_keys = parsedKeys;
+    m_unitWidth = parsedUnitWidth;
+    m_unitHeight = parsedUnitHeight;
+    m_keySpacing = parsedKeySpacing;
+
+    qDebug() << "Loaded layout:" << m_name << "with" << m_keys.size() << "keys";
+    return true;
+}
+
+bool KeyLayout::parseFile(const QString& filePath, QString& name, QMap<int, KeyInfo>& keys,
+                          int& unitWidth, int& unitHeight, int& keySpacing) const {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly)) {
         qWarning() << "Failed to open layout file:" << filePath;
@@ -46,15 +70,20 @@ bool KeyLayout::loadFromFile(const QString& filePath) {
     }
 
     QJsonObject root = doc.object();
-    m_name = root.value("name").toString("Unknown");
-    m_unitWidth = root.value("unitWidth").toInt(40);
-    m_unitHeight = root.value("unitHeight").toInt(40);
-    m_keySpacing = root.value("keySpacing").toInt(4);
+    name = root.value("name").toString("Unknown");
+    unitWidth = root.value("unitWidth").toInt(40);
+    unitHeight = root.value("unitHeight").toInt(40);
+    keySpacing = root.value("keySpacing").toInt(4);
 
-    QJsonArray keys = root.value("keys").toArray();
-    m_keys.clear();
+    if (unitWidth <= 0 || unitHeight <= 0 || keySpacing < 0) {
+        qWarning() << "Invalid layout dimensions in:" << filePath;
+        return false;
+    }
 
-    for (const QJsonValue& keyValue : keys) {
+    QJsonArray keysArray = root.value("keys").toArray();
+    keys.clear();
+
+    for (const QJsonValue& keyValue : keysArray) {
         QJsonObject keyObj = keyValue.toObject();
         KeyInfo info;
         info.vkCode = keyObj.value("vkCode").toInt(0);
@@ -64,16 +93,15 @@ bool KeyLayout::loadFromFile(const QString& filePath) {
         info.width = keyObj.value("width").toDouble(1);
         info.height = keyObj.value("height").toDouble(1);
 
-        int x = static_cast<int>(info.col * (m_unitWidth + m_keySpacing));
-        int y = static_cast<int>(info.row * (m_unitHeight + m_keySpacing));
-        int w = static_cast<int>(info.width * m_unitWidth + (info.width - 1) * m_keySpacing);
-        int h = static_cast<int>(info.height * m_unitHeight + (info.height - 1) * m_keySpacing);
+        int x = static_cast<int>(info.col * (unitWidth + keySpacing));
+        int y = static_cast<int>(info.row * (unitHeight + keySpacing));
+        int w = static_cast<int>(info.width * unitWidth + (info.width - 1) * keySpacing);
+        int h = static_cast<int>(info.height * unitHeight + (info.height - 1) * keySpacing);
         info.geometry = QRect(x, y, w, h);
 
-        m_keys.insert(info.vkCode, info);
+        keys.insert(info.vkCode, info);
     }
 
-    qDebug() << "Loaded layout:" << m_name << "with" << m_keys.size() << "keys";
     return true;
 }
 

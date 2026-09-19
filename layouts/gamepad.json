@@ -1,0 +1,39 @@
+{
+    "name": "Gamepad (XInput)",
+    "unitWidth": 80,
+    "unitHeight": 80,
+    "keySpacing": 8,
+    "keys": [
+        {"vkCode": 280, "label": "LB", "row": 0, "col": 0, "width": 1},
+        {"vkCode": 281, "label": "RB", "row": 0, "col": 1, "width": 1},
+        {"vkCode": 277, "label": "Back", "row": 0, "col": 3, "width": 1},
+        {"vkCode": 276, "label": "Start", "row": 0, "col": 4, "width": 1},
+
+        {"vkCode": 286, "label": "LT", "row": 1, "col": 0, "width": 1},
+        {"vkCode": 287, "label": "RT", "row": 1, "col": 1, "width": 1},
+        {"vkCode": 278, "label": "LS", "row": 1, "col": 3, "width": 1},
+        {"vkCode": 279, "label": "RS", "row": 1, "col": 4, "width": 1},
+
+        {"vkCode": 274, "label": "←", "row": 2, "col": 0, "width": 1},
+        {"vkCode": 272, "label": "↑", "row": 2, "col": 1, "width": 1},
+        {"vkCode": 273, "label": "↓", "row": 2, "col": 2, "width": 1},
+        {"vkCode": 275, "label": "→", "row": 2, "col": 3, "width": 1},
+
+        {"vkCode": 282, "label": "A", "row": 3, "col": 0, "width": 1},
+        {"vkCode": 283, "label": "B", "row": 3, "col": 1, "width": 1},
+        {"vkCode": 284, "label": "X", "row": 3, "col": 2, "width": 1},
+        {"vkCode": 285, "label": "Y", "row": 3, "col": 3, "width": 1},
+
+        {"vkCode": 290, "label": "L←", "row": 4, "col": 0, "width": 1},
+        {"vkCode": 291, "label": "L→", "row": 4, "col": 1, "width": 1},
+        {"vkCode": 288, "label": "L↑", "row": 4, "col": 2, "width": 1},
+        {"vkCode": 289, "label": "L↓", "row": 4, "col": 3, "width": 1},
+
+        {"vkCode": 294, "label": "R←", "row": 5, "col": 0, "width": 1},
+        {"vkCode": 295, "label": "R→", "row": 5, "col": 1, "width": 1},
+        {"vkCode": 292, "label": "R↑", "row": 5, "col": 2, "width": 1},
+        {"vkCode": 293, "label": "R↓", "row": 5, "col": 3, "width": 1},
+
+        {"vkCode": 513, "label": "LT/RT", "row": 0, "col": 5.5, "width": 2, "height": 6}
+    ]
+}

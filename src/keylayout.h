@@ -49,11 +49,12 @@ public:
     int unitWidth() const { return m_unitWidth; }
     int unitHeight() const { return m_unitHeight; }
     int keySpacing() const { return m_keySpacing; }
-
     QRect getKeyGeometry(int vkCode) const;
     QString getKeyLabel(int vkCode) const;
 
 private:
+    bool parseFile(const QString& filePath, QString& name, QMap<int, KeyInfo>& keys,
+                   int& unitWidth, int& unitHeight, int& keySpacing) const;
     QMap<int, KeyInfo> m_keys;
     QString m_name;
     int m_unitWidth = 40;

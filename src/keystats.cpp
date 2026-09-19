@@ -64,6 +64,25 @@ void KeyStats::recordMouseMotion(int dx, int dy) {
     emit statsUpdated();
 }
 
+void KeyStats::recordGamepadAxes(int lt, int rt, int lx, int ly, int rx, int ry) {
+    const bool changed = !m_gamepadConnected
+        || lt != m_padLt || rt != m_padRt
+        || lx != m_padLx || ly != m_padLy
+        || rx != m_padRx || ry != m_padRy;
+    if (!changed) {
+        return;
+    }
+
+    m_gamepadConnected = true;
+    m_padLt = lt;
+    m_padRt = rt;
+    m_padLx = lx;
+    m_padLy = ly;
+    m_padRx = rx;
+    m_padRy = ry;
+    emit statsUpdated();
+}
+
 int KeyStats::mouseVelocityX() const {
     return qRound(m_mouseVx * (1000.0 / MOUSE_MOTION_SAMPLE_MS));
 }
@@ -127,5 +146,7 @@ void KeyStats::reset() {
     m_kpsInstant = 0;
     m_mouseVx = 0.0;
     m_mouseVy = 0.0;
+    m_padLt = m_padRt = 0;
+    m_padLx = m_padLy = m_padRx = m_padRy = 0;
     emit statsUpdated();
 }

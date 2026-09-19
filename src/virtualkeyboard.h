@@ -38,6 +38,7 @@ public slots:
     void onKeyReleased(int vkCode);
     void updatePressedKeys(const QSet<int>& keys);
     void onMouseMotion(int dx, int dy);
+    void onGamepadAxes(int lt, int rt, int lx, int ly, int rx, int ry);
 
 signals:
     void keyClicked(int vkCode);
@@ -50,6 +51,7 @@ private slots:
 
 private:
     void drawGauge(QPainter* painter, const QRect& rect) const;
+    void drawTriggerBars(QPainter* painter, const QRect& rect) const;
 
     KeyLayout* m_layout = nullptr;
     QSet<int> m_pressedKeys;
@@ -57,6 +59,8 @@ private:
     double m_gaugeVx = 0.0;
     double m_gaugeVy = 0.0;
     QTimer* m_gaugeDecayTimer = nullptr;
+    int m_padLt = 0;
+    int m_padRt = 0;
 
     QColor m_keyNormalColor;
     QColor m_keyPressedColor;

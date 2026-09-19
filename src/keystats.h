@@ -31,6 +31,7 @@ public:
     void recordKeyPress(int vkCode);
     void recordKeyRelease(int vkCode);
     void recordMouseMotion(int dx, int dy);
+    void recordGamepadAxes(int lt, int rt, int lx, int ly, int rx, int ry);
     void setValidKeys(const QSet<int>& validKeys);
 
     int totalKeyPresses() const { return m_totalKeyPresses; }
@@ -38,6 +39,14 @@ public:
     // Smoothed mouse velocity in px/s; decays to 0 when motion events stop.
     int mouseVelocityX() const;
     int mouseVelocityY() const;
+    // Raw analog channels; valid once a controller has reported state.
+    bool gamepadConnected() const { return m_gamepadConnected; }
+    int padLt() const { return m_padLt; }
+    int padRt() const { return m_padRt; }
+    int padLx() const { return m_padLx; }
+    int padLy() const { return m_padLy; }
+    int padRx() const { return m_padRx; }
+    int padRy() const { return m_padRy; }
     const QMap<int, int>& keyCounts() const { return m_keyCounts; }
     const QSet<int>& pressedKeys() const { return m_pressedKeys; }
 
@@ -61,6 +70,13 @@ private:
     double m_mouseVx = 0.0;
     double m_mouseVy = 0.0;
     qint64 m_lastMotionMs = 0;
+    bool m_gamepadConnected = false;
+    int m_padLt = 0;
+    int m_padRt = 0;
+    int m_padLx = 0;
+    int m_padLy = 0;
+    int m_padRx = 0;
+    int m_padRy = 0;
     QTimer* m_kpsTimer = nullptr;
 };
 

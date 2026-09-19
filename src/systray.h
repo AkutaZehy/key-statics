@@ -34,6 +34,7 @@ public:
     void hide();
     void updateCurrentLayout(const QString& layoutName);
     void updateKeyboardVisible(bool visible);
+    void setLayoutFiles(const QStringList& layoutPaths);
     void refreshMenu();
 
 signals:
@@ -52,12 +53,15 @@ public slots:
 
 private:
     void createMenu();
+    void rebuildLayoutMenu();
 
     MainWindow* m_mainWindow = nullptr;
     QSystemTrayIcon* m_trayIcon = nullptr;
     QMenu* m_menu = nullptr;
+    QMenu* m_layoutMenu = nullptr;
     QString m_currentLayout;
     bool m_keyboardVisible = false;
+    QStringList m_layoutFiles;
     QMap<QString, QAction*> m_layoutActions;
     QAction* m_currentLayoutAction = nullptr;
     QAction* m_showKeyboardAction = nullptr;

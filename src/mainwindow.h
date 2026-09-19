@@ -24,12 +24,15 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QThread>
+#include <QTimer>
 #include "keyboardhook.h"
 #include "mousehook.h"
+#include "gamepadpoller.h"
 #include "keylayout.h"
 #include "virtualkeyboard.h"
 #include "keystats.h"
 #include "httpserver.h"
+#include "layoutmanager.h"
 #include "systray.h"
 #include "previewwindow.h"
 
@@ -55,14 +58,23 @@ private slots:
     void onMousePressed(int vkCode);
     void onMouseReleased(int vkCode);
     void onMouseMoved(int dx, int dy);
+    void onGamepadAxes(int lt, int rt, int lx, int ly, int rx, int ry);
+    void onLayoutLoaded(const QString& path);
+    void onAutoSwitchTick();
 
 private:
     bool loadLayout(const QString& layoutFile);
     void updateLayoutDisplayName(const QString& layoutFile);
+    QString resolveLayoutPath(const QString& layoutName) const;
+    QString foregroundProcessName() const;
 
     KeyboardHook* m_keyboardHook = nullptr;
     MouseHook* m_mouseHook = nullptr;
     QThread* m_hookThread = nullptr;
+    LayoutManager* m_layoutManager = nullptr;
+    QTimer* m_autoSwitchTimer = nullptr;
+    bool m_autoSwitchedAway = false;
+    GamepadPoller* m_gamepadPoller = nullptr;
     KeyLayout* m_layout = nullptr;
     VirtualKeyboard* m_keyboard = nullptr;
     KeyStats* m_keyStats = nullptr;

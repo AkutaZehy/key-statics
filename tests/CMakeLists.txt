@@ -26,6 +26,15 @@ add_executable(test_config
 target_include_directories(test_config PRIVATE ${CMAKE_SOURCE_SRC_DIR})
 target_link_libraries(test_config PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Widgets)
 
+add_executable(test_gamepad
+    test_gamepad.cpp
+    ${CMAKE_SOURCE_SRC_DIR}/gamepadpoller.cpp
+    ${CMAKE_SOURCE_SRC_DIR}/gamepadpoller.h
+)
+target_include_directories(test_gamepad PRIVATE ${CMAKE_SOURCE_SRC_DIR})
+target_link_libraries(test_gamepad PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Core)
+
 add_test(NAME test_keystats COMMAND test_keystats)
 add_test(NAME test_keylayout COMMAND test_keylayout)
 add_test(NAME test_config COMMAND test_config)
+add_test(NAME test_gamepad COMMAND test_gamepad)

@@ -28,6 +28,9 @@
 - Background execution (no visible window)
 - Mouse button support (left, right, middle, X1, X2)
 - Mouse motion gauge: a velocity vector meter placeable like a key
+- Gamepad (XInput) support: buttons as keys, analog trigger bars
+- Layout hot reload: edit JSON while running, sources update live
+- Auto-switch layouts when a configured game gets focus
 - Preview tool for testing layouts
 - Privacy by default: the server listens on 127.0.0.1 only
 
@@ -66,6 +69,7 @@ real time**.
 - **dfjk-mouse.json** - DFJK layout with mouse buttons
 - **wasd.json** - WASD layout (4 keys)
 - **wasd-mouse.json** - WASD layout with mouse buttons
+- **gamepad.json** - XInput gamepad layout with trigger bars
 
 ### Switching Layouts
 
@@ -113,6 +117,9 @@ Create a `config.json` file in the same directory as `key-statics.exe`:
 | display | fontFamily | Font family for key labels |
 | display | gaugeMaxSpeed | Mouse speed in px/s that fully deflects the motion gauge (default: 3000) |
 | layout | default | Default layout filename |
+| layout | autoSwitch | Process-name / layout pairs for focus-based switching |
+| gamepad | enabled | Poll an XInput controller (default: true) |
+| gamepad | userIndex | XInput controller slot 0-3 (default: 0) |
 
 ## Mouse Support
 
@@ -148,7 +155,8 @@ and it lives in its own virtual-key-code segment:
 | Element | Code |
 |---------|------|
 | Mouse velocity gauge | 512 (0x200) |
-| Reserved for future elements | 513-543 (0x201-0x2FF) |
+| Gamepad trigger bars (LT/RT) | 513 (0x201) |
+| Reserved for future elements | 514-543 (0x202-0x2FF) |
 
 Add it to any layout like a key — presence in the layout is the on/off
 switch, and `row`/`col`/`width`/`height` decide where and how big it is:
@@ -169,6 +177,68 @@ Notes:
 - The gauge is also rendered in the native overlay window and the preview.
 - Movement is measured as screen deltas, so on multi-monitor setups with
   mixed DPI scaling the magnitude is approximate.
+
+## Gamepad Support (XInput)
+
+Xbox controllers (and any XInput-compatible pad) are reported as virtual
+keys, so they work in layouts, stats, the preview and the overlay exactly
+like keyboard or mouse input:
+
+| Input | Code |
+|-------|------|
+| D-pad Up/Down/Left/Right | 272-275 (0x110-0x113) |
+| Start / Back | 276 / 277 |
+| Stick clicks L / R | 278 / 279 |
+| Bumpers LB / RB | 280 / 281 |
+| A / B / X / Y | 282-285 (0x11A-0x11D) |
+| Triggers LT / RT (press at threshold) | 286 / 287 |
+| Left stick up/down/left/right | 288-291 (0x120-0x123) |
+| Right stick up/down/left/right | 292-295 (0x124-0x127) |
+| Trigger bars element (see above) | 513 |
+
+`layouts/gamepad.json` is a ready-made example. Configuration:
+
+```json
+{
+    "gamepad": {
+        "enabled": true,
+        "userIndex": 0
+    }
+}
+```
+
+`userIndex` selects the XInput controller slot (0-3). With no controller
+connected the poller stays idle.
+
+## Layout Hot Reload
+
+Files in `layouts/` are watched: adding or removing JSON files updates the
+tray menu and the preview dropdown immediately, and saving the currently
+active layout reloads it in place. A file that fails to parse (for example
+while the editor is halfway through writing) is ignored and the last good
+layout stays on screen; browser sources are told to refresh themselves.
+
+## Auto-Switch Layouts
+
+`layout.autoSwitch` pairs a process name fragment with a layout name
+(without extension). While a matching application has focus its layout is
+active; when focus moves elsewhere the default layout returns:
+
+```json
+{
+    "layout": {
+        "default": "104keys",
+        "autoSwitch": [
+            {"process": "osu!", "layout": "dfjk"},
+            {"process": "eurotrucks2", "layout": "wasd"}
+        ]
+    }
+}
+```
+
+Matching is case-insensitive against the executable file name
+(`eurotrucks2` matches `EuroTrucks2.exe`); the first rule that matches
+wins and is re-checked once per second.
 
 ## Custom Keyboard Layouts
 

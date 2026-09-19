@@ -23,6 +23,7 @@
 // codes in sequence.
 constexpr int VK_ELEMENT_FIRST = 0x200;
 constexpr int VK_GAUGE_MOUSE_VELOCITY = 0x200;
+constexpr int VK_GAUGE_GAMEPAD_TRIGGERS = 0x201;
 
 // Mouse motion sampling period. The LL mouse hook only accumulates raw
 // deltas (high polling-rate mice fire thousands of events per second); a

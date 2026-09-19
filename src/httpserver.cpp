@@ -239,7 +239,7 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
             const kb = document.getElementById('keyboard');
             keys.forEach(k => {
                 if (k.vk >= elementVk) {
-                    renderGauge(k, kb);
+                    renderElement(k, kb);
                     return;
                 }
                 const r = keyRect(k);
@@ -260,7 +260,7 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
 
         const gauges = [];
 
-        function renderGauge(k, kb) {
+        function renderElement(k, kb) {
             const r = keyRect(k);
             const div = document.createElement('div');
             div.className = 'gauge';
@@ -278,20 +278,29 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
             kb.appendChild(div);
             const ctx = cv.getContext('2d');
             ctx.scale(dpr, dpr);
-            gauges.push({ ctx, w: r.w, h: r.h, tx: 0, ty: 0, px: 0, py: 0, vx: 0, vy: 0 });
+            const base = { ctx, w: r.w, h: r.h };
+            if (k.vk === 513) {
+                gauges.push({ ...base, kind: 'triggers', lt: 0, rt: 0 });
+            } else {
+                gauges.push({ ...base, kind: 'vector', tx: 0, ty: 0, px: 0, py: 0, vx: 0, vy: 0 });
+            }
         }
 
         // Under-damped spring: the dot accelerates toward the measured
         // velocity vector and wobbles back to center when the mouse stops.
         function tickGauges() {
             for (const g of gauges) {
-                g.vx += (g.tx - g.px) * 0.12;
-                g.vx *= 0.80;
-                g.px += g.vx;
-                g.vy += (g.ty - g.py) * 0.12;
-                g.vy *= 0.80;
-                g.py += g.vy;
-                drawGauge(g);
+                if (g.kind === 'vector') {
+                    g.vx += (g.tx - g.px) * 0.12;
+                    g.vx *= 0.80;
+                    g.px += g.vx;
+                    g.vy += (g.ty - g.py) * 0.12;
+                    g.vy *= 0.80;
+                    g.py += g.vy;
+                    drawGauge(g);
+                } else {
+                    drawTriggers(g);
+                }
             }
             requestAnimationFrame(tickGauges);
         }
@@ -330,6 +339,29 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
             ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
         }
 
+        function drawTriggers(g) {
+            const ctx = g.ctx;
+            ctx.clearRect(0, 0, g.w, g.h);
+            const pad = 10;
+            const barW = (g.w - pad * 3) / 2;
+            const trackH = g.h - pad * 2 - 14;
+            const bars = [['LT', g.lt], ['RT', g.rt]];
+            for (let i = 0; i < 2; i++) {
+                const x = pad + i * (barW + pad);
+                ctx.fillStyle = 'rgba(0,0,0,0.35)';
+                ctx.fillRect(x, pad, barW, trackH);
+                const fill = Math.max(0, Math.min(255, bars[i][1])) / 255 * trackH;
+                if (fill > 0) {
+                    ctx.fillStyle = activeColor;
+                    ctx.fillRect(x, pad + trackH - fill, barW, fill);
+                }
+                ctx.fillStyle = '#fff';
+                ctx.font = '11px ' + 'monospace';
+                ctx.textAlign = 'center';
+                ctx.fillText(bars[i][0], x + barW / 2, pad + trackH + 12);
+            }
+        }
+
         function updateKeys(data) {
             const pressed = {};
             if (data.pressed) data.pressed.forEach(v => pressed[v] = true);
@@ -345,8 +377,18 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
                 const tx = Math.max(-1, Math.min(1, data.mvx / gaugeMaxSpeed));
                 const ty = Math.max(-1, Math.min(1, data.mvy / gaugeMaxSpeed));
                 for (const g of gauges) {
-                    g.tx = tx;
-                    g.ty = ty;
+                    if (g.kind === 'vector') {
+                        g.tx = tx;
+                        g.ty = ty;
+                    }
+                }
+            }
+            if (data.pad) {
+                for (const g of gauges) {
+                    if (g.kind === 'triggers') {
+                        g.lt = data.pad.lt;
+                        g.rt = data.pad.rt;
+                    }
                 }
             }
         }
@@ -355,6 +397,7 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
         function connect() {
             es = new EventSource('/events');
             es.onmessage = e => updateKeys(JSON.parse(e.data));
+            es.addEventListener('reload', () => window.location.reload());
             es.onerror = () => {
                 es.close();
                 es = null;
@@ -449,6 +492,18 @@ void HttpServer::sendSse(QTcpSocket* socket) {
     socket->flush();
 }
 
+void HttpServer::notifyLayoutChanged() {
+    if (m_sseClients.isEmpty()) return;
+
+    const QByteArray frame = "event: reload\r\ndata: layout\r\n\r\n";
+    for (QTcpSocket* client : m_sseClients) {
+        if (client->state() == QAbstractSocket::ConnectedState) {
+            client->write(frame);
+            client->flush();
+        }
+    }
+}
+
 void HttpServer::onStatsChanged() {
     if (m_sseClients.isEmpty()) return;
     if (!m_sseCoalesceTimer->isActive()) {
@@ -480,6 +535,17 @@ QString HttpServer::ssePayload() const {
     json["totalKeyPresses"] = m_stats->totalKeyPresses();
     json["mvx"] = m_stats->mouseVelocityX();
     json["mvy"] = m_stats->mouseVelocityY();
+
+    if (m_stats->gamepadConnected()) {
+        QJsonObject pad;
+        pad["lt"] = m_stats->padLt();
+        pad["rt"] = m_stats->padRt();
+        pad["lx"] = m_stats->padLx();
+        pad["ly"] = m_stats->padLy();
+        pad["rx"] = m_stats->padRx();
+        pad["ry"] = m_stats->padRy();
+        json["pad"] = pad;
+    }
 
     QJsonDocument doc(json);
     return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));

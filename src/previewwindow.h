@@ -20,6 +20,7 @@
 #include <QMainWindow>
 #include <QComboBox>
 #include <QPushButton>
+#include <QLabel>
 #include "keylayout.h"
 #include "virtualkeyboard.h"
 
@@ -39,6 +40,13 @@ public slots:
     void onMouseMotion(int dx, int dy) {
         m_keyboard->onMouseMotion(dx, dy);
     }
+    void onGamepadAxes(int lt, int rt, int lx, int ly, int rx, int ry) {
+        m_keyboard->onGamepadAxes(lt, rt, lx, ly, rx, ry);
+    }
+    // Rescans the layouts dir so files added after opening show up.
+    void refreshLayouts() {
+        loadLayouts();
+    }
 
 private slots:
     void onLayoutChanged(int index);
@@ -47,10 +55,12 @@ private slots:
 private:
     void loadLayouts();
     void loadSelectedLayout();
+    void updateLastInputLabel(int vkCode);
 
     QComboBox* m_layoutCombo = nullptr;
     QPushButton* m_resetButton = nullptr;
     QPushButton* m_closeButton = nullptr;
+    QLabel* m_lastInputLabel = nullptr;
 
     KeyLayout* m_layout = nullptr;
     VirtualKeyboard* m_keyboard = nullptr;
