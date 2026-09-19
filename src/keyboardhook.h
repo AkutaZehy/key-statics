@@ -28,6 +28,9 @@ public:
     explicit KeyboardHook(QObject* parent = nullptr);
     ~KeyboardHook();
 
+public slots:
+    // Invoked on the worker thread that owns this object, so the low-level
+    // hook is installed and serviced there instead of the GUI thread.
     bool start();
     void stop();
 

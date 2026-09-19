@@ -16,13 +16,11 @@
  */
 #include "httpserver.h"
 #include "config.h"
+#include "inputconsts.h"
 #include <QDebug>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
-#include <QTimer>
-
-QList<QTcpSocket*> sseClients;
 
 HttpServer::HttpServer(KeyStats* stats, QObject* parent)
     : QObject(parent)
@@ -30,10 +28,16 @@ HttpServer::HttpServer(KeyStats* stats, QObject* parent)
 {
     m_server = new QTcpServer(this);
     connect(m_server, &QTcpServer::newConnection, this, &HttpServer::onNewConnection);
-    
-    QTimer* timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &HttpServer::broadcastSse);
-    timer->start(16);
+
+    // Coalesce bursts of statsUpdated into at most one SSE frame per tick.
+    m_sseCoalesceTimer = new QTimer(this);
+    m_sseCoalesceTimer->setSingleShot(true);
+    m_sseCoalesceTimer->setInterval(8);
+    connect(m_sseCoalesceTimer, &QTimer::timeout, this, &HttpServer::broadcastSse);
+
+    if (m_stats) {
+        connect(m_stats, &KeyStats::statsUpdated, this, &HttpServer::onStatsChanged);
+    }
 }
 
 HttpServer::~HttpServer() {
@@ -46,7 +50,7 @@ void HttpServer::setLayout(KeyLayout* layout) {
 
 QString HttpServer::generateKeyboardJson() const {
     if (!m_layout) return "[]";
-    
+
     QStringList keyList;
     const QMap<int, KeyInfo>& keys = m_layout->keys();
     for (auto it = keys.constBegin(); it != keys.constEnd(); ++it) {
@@ -71,8 +75,14 @@ QString HttpServer::generateKeyboardJson() const {
 
 bool HttpServer::start(quint16 port) {
     m_port = port;
-    if (m_server->listen(QHostAddress::Any, m_port)) {
-        qDebug() << "HTTP server started on port" << m_port;
+    const QHostAddress bindAddress = Config::instance()->allowRemoteAccess()
+        ? QHostAddress(QHostAddress::Any)
+        : QHostAddress(QHostAddress::LocalHost);
+
+    if (m_server->listen(bindAddress, m_port)) {
+        qDebug() << "HTTP server started on"
+                 << (bindAddress == QHostAddress::LocalHost ? "127.0.0.1" : "0.0.0.0")
+                 << ":" << m_port;
         return true;
     }
     qWarning() << "Failed to start HTTP server:" << m_server->errorString();
@@ -84,28 +94,58 @@ void HttpServer::stop() {
         m_server->close();
         qDebug() << "HTTP server stopped";
     }
+    for (QTcpSocket* client : m_sseClients) {
+        client->disconnectFromHost();
+    }
+    m_sseClients.clear();
+    m_requestBuffers.clear();
 }
 
 void HttpServer::onNewConnection() {
     QTcpSocket* socket = m_server->nextPendingConnection();
-    connect(socket, &QTcpSocket::readyRead, this, [this, socket]() { onReadyRead(); });
+    if (!socket) return;
+    socket->setParent(this);
+
+    connect(socket, &QTcpSocket::disconnected, this, [this, socket]() {
+        m_sseClients.removeAll(socket);
+        m_requestBuffers.remove(socket);
+        socket->deleteLater();
+    });
+    connect(socket, &QTcpSocket::errorOccurred, this, [socket](QAbstractSocket::SocketError) {
+        socket->disconnectFromHost();
+    });
+
+    connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
+        QByteArray& buffer = m_requestBuffers[socket];
+        buffer += socket->readAll();
+
+        // Wait for the full request head before parsing; drop abusive clients.
+        int headEnd = buffer.indexOf("\r\n\r\n");
+        if (headEnd < 0) {
+            if (buffer.size() > 16 * 1024) {
+                qWarning() << "Dropping client: oversized HTTP request";
+                m_requestBuffers.remove(socket);
+                socket->disconnectFromHost();
+            }
+            return;
+        }
+        m_requestBuffers.remove(socket);
+        handleRequest(socket, QString::fromUtf8(buffer.left(headEnd)));
+    });
 }
 
-void HttpServer::onReadyRead() {
-    QTcpSocket* socket = qobject_cast<QTcpSocket*>(sender());
-    if (!socket) return;
-
-    QByteArray requestData = socket->readAll();
-    QString request = QString::fromUtf8(requestData);
-
+void HttpServer::handleRequest(QTcpSocket* socket, const QString& request) {
     QStringList lines = request.split("\r\n");
-    if (lines.isEmpty()) return;
+    if (lines.isEmpty()) {
+        socket->disconnectFromHost();
+        return;
+    }
 
     QString firstLine = lines.first();
     QStringList parts = firstLine.split(" ");
 
     if (parts.size() < 2) {
-        socket->close();
+        socket->disconnectFromHost();
         return;
     }
 
@@ -133,16 +173,14 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
         body { background: transparent; margin: 0; padding: 10px; font-family: )" + config->fontFamily() + R"(; }
         .keyboard {
             position: relative;
-            width: 1000px;
-            height: 300px;
         }
-        .key { 
+        .key {
             position: absolute;
-            background: )" + config->keyColor() + R"(; 
-            border: 1px solid #555; 
-            border-radius: 4px; 
-            padding: 4px; 
-            text-align: center; 
+            background: )" + config->keyColor() + R"(;
+            border: 1px solid #555;
+            border-radius: 4px;
+            padding: 4px;
+            text-align: center;
             color: #fff;
             font-size: 11px;
             display: flex;
@@ -153,11 +191,18 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
         }
         .key.pressed { background: )" + config->keyActiveColor() + R"(; }
         .stats { color: #0f0; font-size: 14px; margin-bottom: 10px; }
+        .gauge {
+            position: absolute;
+            background: )" + config->keyColor() + R"(;
+            border: 1px solid #555;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
     </style>
 </head>
 <body>
     <div class="stats">
-        <span id="kps">KPS: 0</span> | 
+        <span id="kps">KPS: 0</span> |
         <span id="total">Total: 0</span>
     </div>
     <div class="keyboard" id="keyboard"></div>
@@ -166,26 +211,125 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
         const unitHeight = )" + QString::number(config->unitHeight()) + R"(;
         const keySpacing = )" + QString::number(config->keySpacing()) + R"(;
         const keys = )" + generateKeyboardJson() + R"(;
-        
+        const elementVk = )" + QString::number(VK_ELEMENT_FIRST) + R"(;
+        const gaugeMaxSpeed = )" + QString::number(config->gaugeMaxSpeed()) + R"(;
+        const activeColor = ')" + config->keyActiveColor() + R"(';
+
+        function applyLayoutSize() {
+            let cols = 0, rows = 0;
+            keys.forEach(k => {
+                cols = Math.max(cols, k.c + (k.w || 1));
+                rows = Math.max(rows, k.r + (k.h || 1));
+            });
+            const kb = document.getElementById('keyboard');
+            kb.style.width = (cols * unitWidth + Math.max(0, cols - 1) * keySpacing) + 'px';
+            kb.style.height = (rows * unitHeight + Math.max(0, rows - 1) * keySpacing) + 'px';
+        }
+
+        function keyRect(k) {
+            return {
+                x: k.c * (unitWidth + keySpacing),
+                y: k.r * (unitHeight + keySpacing),
+                w: k.w * unitWidth + (k.w - 1) * keySpacing,
+                h: (k.h || 1) * unitHeight + (k.h - 1 || 0) * keySpacing
+            };
+        }
+
         function renderKeyboard() {
             const kb = document.getElementById('keyboard');
             keys.forEach(k => {
+                if (k.vk >= elementVk) {
+                    renderGauge(k, kb);
+                    return;
+                }
+                const r = keyRect(k);
                 const keyDiv = document.createElement('div');
                 keyDiv.className = 'key';
-                const x = k.c * (unitWidth + keySpacing);
-                const y = k.r * (unitHeight + keySpacing);
-                const w = k.w * unitWidth + (k.w - 1) * keySpacing;
-                const h = (k.h || 1) * unitHeight + (k.h - 1 || 0) * keySpacing;
-                keyDiv.style.left = x + 'px';
-                keyDiv.style.top = y + 'px';
-                keyDiv.style.width = w + 'px';
-                keyDiv.style.height = h + 'px';
+                keyDiv.style.left = r.x + 'px';
+                keyDiv.style.top = r.y + 'px';
+                keyDiv.style.width = r.w + 'px';
+                keyDiv.style.height = r.h + 'px';
                 keyDiv.textContent = k.l || '';
                 keyDiv.dataset.vk = k.vk || 0;
                 kb.appendChild(keyDiv);
             });
+            if (gauges.length > 0) {
+                requestAnimationFrame(tickGauges);
+            }
         }
-        
+
+        const gauges = [];
+
+        function renderGauge(k, kb) {
+            const r = keyRect(k);
+            const div = document.createElement('div');
+            div.className = 'gauge';
+            div.style.left = r.x + 'px';
+            div.style.top = r.y + 'px';
+            div.style.width = r.w + 'px';
+            div.style.height = r.h + 'px';
+            const cv = document.createElement('canvas');
+            const dpr = window.devicePixelRatio || 1;
+            cv.width = r.w * dpr;
+            cv.height = r.h * dpr;
+            cv.style.width = r.w + 'px';
+            cv.style.height = r.h + 'px';
+            div.appendChild(cv);
+            kb.appendChild(div);
+            const ctx = cv.getContext('2d');
+            ctx.scale(dpr, dpr);
+            gauges.push({ ctx, w: r.w, h: r.h, tx: 0, ty: 0, px: 0, py: 0, vx: 0, vy: 0 });
+        }
+
+        // Under-damped spring: the dot accelerates toward the measured
+        // velocity vector and wobbles back to center when the mouse stops.
+        function tickGauges() {
+            for (const g of gauges) {
+                g.vx += (g.tx - g.px) * 0.12;
+                g.vx *= 0.80;
+                g.px += g.vx;
+                g.vy += (g.ty - g.py) * 0.12;
+                g.vy *= 0.80;
+                g.py += g.vy;
+                drawGauge(g);
+            }
+            requestAnimationFrame(tickGauges);
+        }
+
+        function drawGauge(g) {
+            const ctx = g.ctx;
+            const cx = g.w / 2, cy = g.h / 2;
+            const maxR = Math.min(g.w, g.h) / 2 - 8;
+            ctx.clearRect(0, 0, g.w, g.h);
+
+            ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(cx, cy, maxR, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.arc(cx, cy, maxR * 0.5, 0, Math.PI * 2); ctx.stroke();
+
+            const mag = Math.min(Math.hypot(g.px, g.py), 1.4);
+            const ax = cx + g.px * maxR, ay = cy + g.py * maxR;
+            const ang = Math.atan2(g.py, g.px);
+            ctx.strokeStyle = activeColor;
+            ctx.fillStyle = activeColor;
+            ctx.lineWidth = 2;
+            ctx.shadowColor = activeColor;
+            ctx.shadowBlur = 4 + mag * 14;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy);
+            ctx.lineTo(ax, ay);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(ax, ay);
+            ctx.lineTo(ax - 8 * Math.cos(ang - 0.45), ay - 8 * Math.sin(ang - 0.45));
+            ctx.lineTo(ax - 8 * Math.cos(ang + 0.45), ay - 8 * Math.sin(ang + 0.45));
+            ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(cx, cy, 2.5, 0, Math.PI * 2); ctx.fill();
+        }
+
         function updateKeys(data) {
             const pressed = {};
             if (data.pressed) data.pressed.forEach(v => pressed[v] = true);
@@ -193,17 +337,32 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
                 const vk = parseInt(k.dataset.vk);
                 k.classList.toggle('pressed', !!pressed[vk]);
             });
-            
+
             document.getElementById('kps').textContent = 'KPS: ' + data.kps;
             document.getElementById('total').textContent = 'Total: ' + data.totalKeyPresses;
+
+            if (data.mvx !== undefined && data.mvy !== undefined) {
+                const tx = Math.max(-1, Math.min(1, data.mvx / gaugeMaxSpeed));
+                const ty = Math.max(-1, Math.min(1, data.mvy / gaugeMaxSpeed));
+                for (const g of gauges) {
+                    g.tx = tx;
+                    g.ty = ty;
+                }
+            }
         }
-        
+
+        let es = null;
         function connect() {
-            const es = new EventSource('/events');
+            es = new EventSource('/events');
             es.onmessage = e => updateKeys(JSON.parse(e.data));
-            es.onerror = () => es.close();
+            es.onerror = () => {
+                es.close();
+                es = null;
+                setTimeout(connect, 2000);
+            };
         }
-        
+
+        applyLayoutSize();
         renderKeyboard();
         connect();
     </script>
@@ -218,9 +377,7 @@ void HttpServer::sendHtml(QTcpSocket* socket) {
     response += "\r\n";
     response += html;
 
-    socket->write(response.toUtf8());
-    socket->flush();
-    socket->close();
+    writeResponse(socket, response);
 }
 
 void HttpServer::sendJson(QTcpSocket* socket) {
@@ -229,7 +386,7 @@ void HttpServer::sendJson(QTcpSocket* socket) {
         QJsonObject json;
         json["totalKeyPresses"] = m_stats->totalKeyPresses();
         json["kps"] = m_stats->kps();
-        
+
         QJsonObject keyCounts;
         for (auto it = m_stats->keyCounts().constBegin(); it != m_stats->keyCounts().constEnd(); ++it) {
             keyCounts[QString::number(it.key())] = it.value();
@@ -255,53 +412,7 @@ void HttpServer::sendJson(QTcpSocket* socket) {
         response += "Stats not available";
     }
 
-    socket->write(response.toUtf8());
-    socket->flush();
-    socket->close();
-}
-
-void HttpServer::sendKeys(QTcpSocket* socket) {
-    QString response;
-    if (m_stats) {
-        QJsonObject json;
-        
-        QJsonArray pressed;
-        for (int vk : m_stats->pressedKeys()) {
-            pressed.append(vk);
-        }
-        json["pressed"] = pressed;
-        
-        QJsonObject counts;
-        for (auto it = m_stats->keyCounts().constBegin(); it != m_stats->keyCounts().constEnd(); ++it) {
-            counts[QString::number(it.key())] = it.value();
-        }
-        json["keyCounts"] = counts;
-        
-        json["kps"] = m_stats->kps();
-        json["totalKeyPresses"] = m_stats->totalKeyPresses();
-
-        QJsonDocument doc(json);
-        QString jsonStr = QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
-
-        response = "HTTP/1.1 200 OK\r\n";
-        response += "Content-Type: application/json\r\n";
-        response += "Access-Control-Allow-Origin: *\r\n";
-        response += "Content-Length: " + QString::number(jsonStr.toUtf8().size()) + "\r\n";
-        response += "Connection: close\r\n";
-        response += "\r\n";
-        response += jsonStr;
-    } else {
-        response = "HTTP/1.1 500 Internal Server Error\r\n";
-        response += "Content-Type: text/plain\r\n";
-        response += "Content-Length: 17\r\n";
-        response += "Connection: close\r\n";
-        response += "\r\n";
-        response += "Stats not available";
-    }
-
-    socket->write(response.toUtf8());
-    socket->flush();
-    socket->close();
+    writeResponse(socket, response);
 }
 
 void HttpServer::sendNotFound(QTcpSocket* socket) {
@@ -312,23 +423,13 @@ void HttpServer::sendNotFound(QTcpSocket* socket) {
     response += "\r\n";
     response += "Not Found";
 
-    socket->write(response.toUtf8());
-    socket->flush();
-    socket->close();
+    writeResponse(socket, response);
 }
 
-QString HttpServer::getPressedKeysJson() const {
-    if (!m_stats) return "{}";
-
-    QJsonObject json;
-    QJsonObject keyCounts;
-    for (auto it = m_stats->keyCounts().constBegin(); it != m_stats->keyCounts().constEnd(); ++it) {
-        keyCounts[QString::number(it.key())] = it.value();
-    }
-    json["keyCounts"] = keyCounts;
-
-    QJsonDocument doc(json);
-    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
+void HttpServer::writeResponse(QTcpSocket* socket, const QString& response) {
+    socket->write(response.toUtf8());
+    socket->flush();
+    socket->disconnectFromHost();
 }
 
 void HttpServer::sendSse(QTcpSocket* socket) {
@@ -340,16 +441,35 @@ void HttpServer::sendSse(QTcpSocket* socket) {
     response += "\r\n";
     socket->write(response.toUtf8());
     socket->flush();
-    
-    sseClients.append(socket);
-    connect(socket, &QTcpSocket::disconnected, this, [this, socket]() {
-        sseClients.removeAll(socket);
-    });
+
+    m_sseClients.append(socket);
+
+    // Push the current state right away; further frames are change-driven.
+    socket->write("data: " + ssePayload().toUtf8() + "\r\n\r\n");
+    socket->flush();
+}
+
+void HttpServer::onStatsChanged() {
+    if (m_sseClients.isEmpty()) return;
+    if (!m_sseCoalesceTimer->isActive()) {
+        m_sseCoalesceTimer->start();
+    }
 }
 
 void HttpServer::broadcastSse() {
-    if (sseClients.isEmpty() || !m_stats) return;
-    
+    if (m_sseClients.isEmpty() || !m_stats) return;
+
+    QByteArray data = "data: " + ssePayload().toUtf8() + "\r\n\r\n";
+
+    for (QTcpSocket* client : m_sseClients) {
+        if (client->state() == QAbstractSocket::ConnectedState) {
+            client->write(data);
+            client->flush();
+        }
+    }
+}
+
+QString HttpServer::ssePayload() const {
     QJsonObject json;
     QJsonArray pressed;
     for (int vk : m_stats->pressedKeys()) {
@@ -358,20 +478,9 @@ void HttpServer::broadcastSse() {
     json["pressed"] = pressed;
     json["kps"] = m_stats->kps();
     json["totalKeyPresses"] = m_stats->totalKeyPresses();
-    
-    QJsonObject keyCounts;
-    for (auto it = m_stats->keyCounts().constBegin(); it != m_stats->keyCounts().constEnd(); ++it) {
-        keyCounts[QString::number(it.key())] = it.value();
-    }
-    json["keyCounts"] = keyCounts;
-    
+    json["mvx"] = m_stats->mouseVelocityX();
+    json["mvy"] = m_stats->mouseVelocityY();
+
     QJsonDocument doc(json);
-    QString data = "data: " + QString::fromUtf8(doc.toJson(QJsonDocument::Compact)) + "\r\n\r\n";
-    
-    for (QTcpSocket* client : sseClients) {
-        if (client->state() == QAbstractSocket::ConnectedState) {
-            client->write(data.toUtf8());
-            client->flush();
-        }
-    }
+    return QString::fromUtf8(doc.toJson(QJsonDocument::Compact));
 }

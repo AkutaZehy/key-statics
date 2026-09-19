@@ -1,0 +1,31 @@
+find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Test Widgets Network)
+
+set(CMAKE_SOURCE_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+
+add_executable(test_keystats
+    test_keystats.cpp
+    ${CMAKE_SOURCE_SRC_DIR}/keystats.cpp
+    ${CMAKE_SOURCE_SRC_DIR}/keystats.h
+)
+target_include_directories(test_keystats PRIVATE ${CMAKE_SOURCE_SRC_DIR})
+target_link_libraries(test_keystats PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Core)
+
+add_executable(test_keylayout
+    test_keylayout.cpp
+    ${CMAKE_SOURCE_SRC_DIR}/keylayout.cpp
+    ${CMAKE_SOURCE_SRC_DIR}/keylayout.h
+)
+target_include_directories(test_keylayout PRIVATE ${CMAKE_SOURCE_SRC_DIR})
+target_link_libraries(test_keylayout PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Core)
+
+add_executable(test_config
+    test_config.cpp
+    ${CMAKE_SOURCE_SRC_DIR}/config.cpp
+    ${CMAKE_SOURCE_SRC_DIR}/config.h
+)
+target_include_directories(test_config PRIVATE ${CMAKE_SOURCE_SRC_DIR})
+target_link_libraries(test_config PRIVATE Qt${QT_VERSION_MAJOR}::Test Qt${QT_VERSION_MAJOR}::Widgets)
+
+add_test(NAME test_keystats COMMAND test_keystats)
+add_test(NAME test_keylayout COMMAND test_keylayout)
+add_test(NAME test_config COMMAND test_config)

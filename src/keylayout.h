@@ -21,15 +21,20 @@
 #include <QMap>
 #include <QRect>
 #include <QString>
+#include "inputconsts.h"
 
 struct KeyInfo {
-    int vkCode;
+    int vkCode = 0;
     QString label;
     QRect geometry;
-    double row;
-    double col;
-    double width;
-    double height;
+    double row = 0.0;
+    double col = 0.0;
+    double width = 1.0;
+    double height = 1.0;
+
+    // Virtual elements (gauges etc.) occupy layout space but render as
+    // instruments, not keycaps, and never receive press events.
+    bool isVirtualElement() const { return vkCode >= VK_ELEMENT_FIRST; }
 };
 
 class KeyLayout : public QObject {
@@ -41,6 +46,9 @@ public:
     bool loadFromFile(const QString& filePath);
     const QMap<int, KeyInfo>& keys() const { return m_keys; }
     const QString& name() const { return m_name; }
+    int unitWidth() const { return m_unitWidth; }
+    int unitHeight() const { return m_unitHeight; }
+    int keySpacing() const { return m_keySpacing; }
 
     QRect getKeyGeometry(int vkCode) const;
     QString getKeyLabel(int vkCode) const;

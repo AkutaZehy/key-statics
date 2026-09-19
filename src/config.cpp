@@ -39,6 +39,7 @@ Config* Config::instance() {
 void Config::setDefaults() {
     m_serverPort = 9876;
     m_autoPortIfOccupied = true;
+    m_allowRemoteAccess = false;
     m_unitWidth = 40;
     m_unitHeight = 40;
     m_keySpacing = 4;
@@ -46,6 +47,7 @@ void Config::setDefaults() {
     m_keyColor = "#444444";
     m_keyActiveColor = "#0096FF";
     m_fontFamily = "monospace";
+    m_gaugeMaxSpeed = 3000;
     m_defaultLayout = "104keys";
 }
 
@@ -80,6 +82,7 @@ void Config::loadFromJson(const QJsonObject& json) {
         QJsonObject server = json["server"].toObject();
         m_serverPort = server["port"].toInt(9876);
         m_autoPortIfOccupied = server["autoPortIfOccupied"].toBool(true);
+        m_allowRemoteAccess = server["allowRemoteAccess"].toBool(false);
     }
     
     if (json.contains("display")) {
@@ -91,6 +94,7 @@ void Config::loadFromJson(const QJsonObject& json) {
         m_keyColor = display["keyColor"].toString("#444444");
         m_keyActiveColor = display["keyActiveColor"].toString("#0096FF");
         m_fontFamily = display["fontFamily"].toString("monospace");
+        m_gaugeMaxSpeed = display["gaugeMaxSpeed"].toInt(3000);
     }
     
     if (json.contains("layout")) {
@@ -124,6 +128,7 @@ QJsonObject Config::saveToJson() const {
     QJsonObject server;
     server["port"] = m_serverPort;
     server["autoPortIfOccupied"] = m_autoPortIfOccupied;
+    server["allowRemoteAccess"] = m_allowRemoteAccess;
     json["server"] = server;
     
     QJsonObject display;
@@ -134,6 +139,7 @@ QJsonObject Config::saveToJson() const {
     display["keyColor"] = m_keyColor;
     display["keyActiveColor"] = m_keyActiveColor;
     display["fontFamily"] = m_fontFamily;
+    display["gaugeMaxSpeed"] = m_gaugeMaxSpeed;
     json["display"] = display;
     
     QJsonObject layout;

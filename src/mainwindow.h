@@ -23,6 +23,7 @@
 #include <QVBoxLayout>
 #include <QLabel>
 #include <QPushButton>
+#include <QThread>
 #include "keyboardhook.h"
 #include "mousehook.h"
 #include "keylayout.h"
@@ -53,6 +54,7 @@ private slots:
     void onKeyReleased(int vkCode);
     void onMousePressed(int vkCode);
     void onMouseReleased(int vkCode);
+    void onMouseMoved(int dx, int dy);
 
 private:
     bool loadLayout(const QString& layoutFile);
@@ -60,6 +62,7 @@ private:
 
     KeyboardHook* m_keyboardHook = nullptr;
     MouseHook* m_mouseHook = nullptr;
+    QThread* m_hookThread = nullptr;
     KeyLayout* m_layout = nullptr;
     VirtualKeyboard* m_keyboard = nullptr;
     KeyStats* m_keyStats = nullptr;

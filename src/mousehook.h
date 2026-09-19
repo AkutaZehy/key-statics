@@ -19,7 +19,10 @@
 
 #include <QObject>
 #include <QSet>
+#include <QTimer>
+#include <atomic>
 #include <Windows.h>
+#include "inputconsts.h"
 
 class MouseHook : public QObject {
     Q_OBJECT
@@ -27,24 +30,41 @@ class MouseHook : public QObject {
 public:
     explicit MouseHook(QObject* parent = nullptr);
     ~MouseHook();
-    
+
+public slots:
+    // Invoked on the worker thread that owns this object, so the low-level
+    // hook is installed and serviced there instead of the GUI thread.
     bool start();
     void stop();
-    
-    const QSet<int>& pressedButtons() const { return m_pressedButtons; }
 
 signals:
     void buttonPressed(int vkCode);
     void buttonReleased(int vkCode);
-    void wheelScrolled(int delta);
+
+    // Emitted at MOUSE_MOTION_SAMPLE_MS with the raw accumulated delta
+    // since the previous sample; receivers convert to px/s themselves.
+    void mouseMoved(int dx, int dy);
+
+private slots:
+    void sampleMotion();
 
 private:
     static MouseHook* s_instance;
     static LRESULT CALLBACK lowLevelMouseProc(int nCode, WPARAM wParam, LPARAM lParam);
-    
+    void accumulateMouseMotion(const POINT& pt);
+
     HHOOK m_hook = nullptr;
     bool m_running = false;
     QSet<int> m_pressedButtons;
+
+    // Motion accumulator. The hook proc and sampleMotion() both run on the
+    // hook thread; atomics only as cheap insurance against thread moves.
+    QTimer* m_motionTimer = nullptr;
+    std::atomic<int> m_pendingDx{0};
+    std::atomic<int> m_pendingDy{0};
+    int m_lastX = 0;
+    int m_lastY = 0;
+    bool m_hasLastPt = false;
 };
 
 #endif

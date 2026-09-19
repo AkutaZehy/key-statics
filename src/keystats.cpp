@@ -15,6 +15,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "keystats.h"
+#include "inputconsts.h"
 #include <QDateTime>
 #include <QJsonObject>
 
@@ -50,7 +51,25 @@ void KeyStats::recordKeyPress(int vkCode) {
 }
 
 void KeyStats::recordKeyRelease(int vkCode) {
-    m_pressedKeys.remove(vkCode);
+    if (m_pressedKeys.remove(vkCode)) {
+        emit statsUpdated();
+    }
+}
+
+void KeyStats::recordMouseMotion(int dx, int dy) {
+    const double alpha = 0.45;
+    m_mouseVx = alpha * dx + (1 - alpha) * m_mouseVx;
+    m_mouseVy = alpha * dy + (1 - alpha) * m_mouseVy;
+    m_lastMotionMs = QDateTime::currentMSecsSinceEpoch();
+    emit statsUpdated();
+}
+
+int KeyStats::mouseVelocityX() const {
+    return qRound(m_mouseVx * (1000.0 / MOUSE_MOTION_SAMPLE_MS));
+}
+
+int KeyStats::mouseVelocityY() const {
+    return qRound(m_mouseVy * (1000.0 / MOUSE_MOTION_SAMPLE_MS));
 }
 
 void KeyStats::updateKps() {
@@ -62,11 +81,27 @@ void KeyStats::updateKps() {
     }
 
     m_kpsInstant = m_recentKeyPressTimes.size() * 10;
-    
+
     const double alpha = 0.5;
-    m_kps = static_cast<int>(alpha * m_kpsInstant + (1 - alpha) * m_kps);
-    
-    emit statsUpdated();
+    int newKps = static_cast<int>(alpha * m_kpsInstant + (1 - alpha) * m_kps);
+    if (newKps != m_kps) {
+        m_kps = newKps;
+        emit statsUpdated();
+    }
+
+    // Once motion events stop arriving, decay the gauge toward zero instead
+    // of freezing at the last measured velocity.
+    if (m_lastMotionMs > 0 && now - m_lastMotionMs > MOUSE_MOTION_SAMPLE_MS * 3) {
+        int oldVx = mouseVelocityX();
+        int oldVy = mouseVelocityY();
+        m_mouseVx *= 0.35;
+        m_mouseVy *= 0.35;
+        if (qAbs(m_mouseVx) < 0.2) m_mouseVx = 0.0;
+        if (qAbs(m_mouseVy) < 0.2) m_mouseVy = 0.0;
+        if (mouseVelocityX() != oldVx || mouseVelocityY() != oldVy) {
+            emit statsUpdated();
+        }
+    }
 }
 
 QVariantMap KeyStats::getStatsJson() const {
@@ -90,5 +125,7 @@ void KeyStats::reset() {
     m_totalKeyPresses = 0;
     m_kps = 0;
     m_kpsInstant = 0;
+    m_mouseVx = 0.0;
+    m_mouseVy = 0.0;
     emit statsUpdated();
 }

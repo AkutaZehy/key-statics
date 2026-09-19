@@ -20,8 +20,6 @@
 #include <QMainWindow>
 #include <QComboBox>
 #include <QPushButton>
-#include "keyboardhook.h"
-#include "mousehook.h"
 #include "keylayout.h"
 #include "virtualkeyboard.h"
 
@@ -30,15 +28,21 @@ class PreviewWindow : public QMainWindow {
 
 public:
     explicit PreviewWindow(QWidget* parent = nullptr);
-    ~PreviewWindow();
 
-private slots:
-    void onLayoutChanged(int index);
-    void onResetClicked();
+public slots:
+    // Fed from the single pair of global hooks owned by MainWindow; the
+    // preview must not install its own (the hook procs are singletons).
     void onKeyPressed(int vkCode);
     void onKeyReleased(int vkCode);
     void onMousePressed(int vkCode);
     void onMouseReleased(int vkCode);
+    void onMouseMotion(int dx, int dy) {
+        m_keyboard->onMouseMotion(dx, dy);
+    }
+
+private slots:
+    void onLayoutChanged(int index);
+    void onResetClicked();
 
 private:
     void loadLayouts();
@@ -47,12 +51,10 @@ private:
     QComboBox* m_layoutCombo = nullptr;
     QPushButton* m_resetButton = nullptr;
     QPushButton* m_closeButton = nullptr;
-    
-    KeyboardHook* m_keyboardHook = nullptr;
-    MouseHook* m_mouseHook = nullptr;
+
     KeyLayout* m_layout = nullptr;
     VirtualKeyboard* m_keyboard = nullptr;
-    
+
     QStringList m_layoutFiles;
 };
 

@@ -15,7 +15,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 #include "virtualkeyboard.h"
+#include "inputconsts.h"
+#include "config.h"
 #include <QPainter>
+#include <cmath>
 #include <QDebug>
 
 VirtualKeyboard::VirtualKeyboard(QWidget* parent)
@@ -26,6 +29,10 @@ VirtualKeyboard::VirtualKeyboard(QWidget* parent)
     m_keyPressedColor = QColor(0, 150, 255, 230);
     m_keyBorderColor = QColor(100, 100, 100);
     m_textColor = Qt::white;
+
+    m_gaugeDecayTimer = new QTimer(this);
+    m_gaugeDecayTimer->setInterval(50);
+    connect(m_gaugeDecayTimer, &QTimer::timeout, this, &VirtualKeyboard::decayGauge);
 }
 
 QSize VirtualKeyboard::sizeHint() const {
@@ -81,6 +88,76 @@ void VirtualKeyboard::updatePressedKeys(const QSet<int>& keys) {
     update();
 }
 
+void VirtualKeyboard::onMouseMotion(int dx, int dy) {
+    const double alpha = 0.45;
+    m_gaugeVx = alpha * dx + (1 - alpha) * m_gaugeVx;
+    m_gaugeVy = alpha * dy + (1 - alpha) * m_gaugeVy;
+    if (!m_gaugeDecayTimer->isActive()) {
+        m_gaugeDecayTimer->start();
+    }
+    update();
+}
+
+void VirtualKeyboard::decayGauge() {
+    m_gaugeVx *= 0.8;
+    m_gaugeVy *= 0.8;
+    if (qAbs(m_gaugeVx) < 0.1 && qAbs(m_gaugeVy) < 0.1) {
+        m_gaugeVx = 0.0;
+        m_gaugeVy = 0.0;
+        m_gaugeDecayTimer->stop();
+    }
+    update();
+}
+
+void VirtualKeyboard::drawGauge(QPainter* painter, const QRect& rect) const {
+    painter->save();
+
+    painter->setBrush(m_keyNormalColor);
+    painter->setPen(m_keyBorderColor);
+    painter->drawRoundedRect(rect, 8, 8);
+
+    const QPointF center = rect.center();
+    const double maxR = qMin(rect.width(), rect.height()) / 2.0 - 8.0;
+
+    QPen ringPen(QColor(255, 255, 255, 30));
+    ringPen.setWidthF(1.0);
+    painter->setPen(ringPen);
+    painter->setBrush(Qt::NoBrush);
+    painter->drawEllipse(center, maxR, maxR);
+    painter->drawEllipse(center, maxR * 0.5, maxR * 0.5);
+
+    // m_gaugeVx is px per motion sample; normalize the same way the web
+    // gauge does: convert to px/s, then clamp against gaugeMaxSpeed.
+    const double scale = Config::instance()->gaugeMaxSpeed();
+    double nx = (m_gaugeVx * (1000.0 / MOUSE_MOTION_SAMPLE_MS)) / scale;
+    double ny = (m_gaugeVy * (1000.0 / MOUSE_MOTION_SAMPLE_MS)) / scale;
+    const double mag = std::hypot(nx, ny);
+    if (mag > 1.0) {
+        nx /= mag;
+        ny /= mag;
+    }
+
+    QPointF tip = center + QPointF(nx, ny) * maxR;
+    QPen arrowPen(m_keyPressedColor);
+    arrowPen.setWidthF(2.0);
+    painter->setPen(arrowPen);
+    painter->setBrush(m_keyPressedColor);
+    painter->drawLine(center, tip);
+
+    const double angle = std::atan2(ny, nx);
+    QPolygonF head;
+    head << tip
+         << tip + QPointF(std::cos(angle + M_PI - 0.45), std::sin(angle + M_PI - 0.45)) * 9.0
+         << tip + QPointF(std::cos(angle + M_PI + 0.45), std::sin(angle + M_PI + 0.45)) * 9.0;
+    painter->drawPolygon(head);
+
+    painter->setPen(Qt::NoPen);
+    painter->setBrush(m_textColor);
+    painter->drawEllipse(center, 2.5, 2.5);
+
+    painter->restore();
+}
+
 void VirtualKeyboard::paintEvent(QPaintEvent* event) {
     Q_UNUSED(event);
     QPainter painter(this);
@@ -95,6 +172,14 @@ void VirtualKeyboard::paintEvent(QPaintEvent* event) {
         const KeyInfo& info = it.value();
         QRect rect = info.geometry;
         rect.translate(10, 10);
+
+        if (info.isVirtualElement()) {
+            if (info.vkCode == VK_GAUGE_MOUSE_VELOCITY) {
+                drawGauge(&painter, rect);
+            }
+            ++it;
+            continue;
+        }
 
         bool pressed = m_pressedKeys.contains(info.vkCode);
         QColor bgColor = pressed ? m_keyPressedColor : m_keyNormalColor;

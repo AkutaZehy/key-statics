@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(key-statics VERSION 1.0.0 LANGUAGES CXX)
+project(key-statics VERSION 1.2.0 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,7 +11,7 @@ set(CMAKE_BUILD_TYPE Release)
 
 set(QT_VERSION_MAJOR 6)
 
-find_package(QT NAMES Qt6 Qt5 REQUIRED COMPONENTS Widgets Network)
+find_package(QT NAMES Qt6 REQUIRED COMPONENTS Widgets Network)
 find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Widgets Network)
 
 set(HEADERS
@@ -58,11 +58,17 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 
 if(WIN32)
     target_link_libraries(${PROJECT_NAME} PRIVATE
-        winmm.lib
         user32.lib
     )
 endif()
 
 target_compile_definitions(${PROJECT_NAME} PRIVATE
     QT_DISABLE_DEPRECATED_BEFORE=0x060000
+    KEY_STATICS_VERSION="${PROJECT_VERSION}"
 )
+
+option(KEY_STATICS_BUILD_TESTS "Build unit tests" ON)
+if(KEY_STATICS_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

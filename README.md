@@ -27,7 +27,9 @@
 - System tray icon with layout switching
 - Background execution (no visible window)
 - Mouse button support (left, right, middle, X1, X2)
+- Mouse motion gauge: a velocity vector meter placeable like a key
 - Preview tool for testing layouts
+- Privacy by default: the server listens on 127.0.0.1 only
 
 ## Quick Start
 
@@ -42,9 +44,24 @@
 
 The keyboard overlay will display key presses in real-time.
 
+If the configured port is occupied and `autoPortIfOccupied` is enabled
+(default), the application picks the next free port and tells you the new
+URL in a popup. If the port is occupied by another instance of
+key-statics, the application exits with an error instead, because
+multi-instance is not supported.
+
+### Security Note
+
+The HTTP server binds to `127.0.0.1` only, so nobody on your network can
+see your keystrokes. Do not enable `server.allowRemoteAccess` unless you
+understand the consequences: with it set to `true`, the server listens on
+all interfaces and **anyone on your LAN can watch your keyboard input in
+real time**.
+
 ### Default Layouts
 
 - **104keys.json** - Full-size 104-key keyboard
+- **104keys-mouse.json** - Full-size keyboard + mouse motion gauge
 - **dfjk.json** - Minimal DFJK layout (4 keys)
 - **dfjk-mouse.json** - DFJK layout with mouse buttons
 - **wasd.json** - WASD layout (4 keys)
@@ -62,7 +79,8 @@ Create a `config.json` file in the same directory as `key-statics.exe`:
 {
     "server": {
         "port": 9876,
-        "autoPortIfOccupied": true
+        "autoPortIfOccupied": true,
+        "allowRemoteAccess": false
     },
     "display": {
         "unitWidth": 40,
@@ -84,7 +102,8 @@ Create a `config.json` file in the same directory as `key-statics.exe`:
 | Section | Field | Description |
 |---------|-------|-------------|
 | server | port | HTTP server port (default: 9876) |
-| server | autoPortIfOccupied | Auto-select port if occupied |
+| server | autoPortIfOccupied | Auto-select the next free port if occupied |
+| server | allowRemoteAccess | Bind to all interfaces instead of 127.0.0.1 (see Security Note) |
 | display | unitWidth | Key width in pixels |
 | display | unitHeight | Key height in pixels |
 | display | keySpacing | Gap between keys in pixels |
@@ -92,6 +111,7 @@ Create a `config.json` file in the same directory as `key-statics.exe`:
 | display | keyColor | Key background color (hex) |
 | display | keyActiveColor | Key active/pressed color (hex) |
 | display | fontFamily | Font family for key labels |
+| display | gaugeMaxSpeed | Mouse speed in px/s that fully deflects the motion gauge (default: 3000) |
 | layout | default | Default layout filename |
 
 ## Mouse Support
@@ -117,6 +137,38 @@ The application supports mouse button input. Add mouse keys to your layout:
 | Middle Button | 4 |
 | X1 | 5 |
 | X2 | 6 |
+
+## Mouse Motion Gauge
+
+Besides buttons, the mouse movement itself can be visualized with a velocity
+vector gauge: an arrow that accelerates in the direction you move the mouse
+and springs back when you stop. It is a virtual layout element, not a key,
+and it lives in its own virtual-key-code segment:
+
+| Element | Code |
+|---------|------|
+| Mouse velocity gauge | 512 (0x200) |
+| Reserved for future elements | 513-543 (0x201-0x2FF) |
+
+Add it to any layout like a key — presence in the layout is the on/off
+switch, and `row`/`col`/`width`/`height` decide where and how big it is:
+
+```json
+{
+    "keys": [
+        {"vkCode": 512, "label": "VEL", "row": 0.5, "col": 22.5, "width": 4, "height": 5}
+    ]
+}
+```
+
+Notes:
+
+- Only one gauge per layout (the code identifies the element).
+- `display.gaugeMaxSpeed` (px/s) sets the mouse speed at which the arrow
+  reaches full deflection.
+- The gauge is also rendered in the native overlay window and the preview.
+- Movement is measured as screen deltas, so on multi-monitor setups with
+  mixed DPI scaling the magnitude is approximate.
 
 ## Custom Keyboard Layouts
 
@@ -222,6 +274,7 @@ This is useful for verifying your custom layout bindings before using them in OB
 mkdir build && cd build
 cmake .. -G "MinGW Makefiles"
 mingw32-make
+ctest  # runs the unit tests
 ```
 
 ### Deployment

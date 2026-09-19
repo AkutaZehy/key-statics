@@ -23,23 +23,24 @@
 #include "mainwindow.h"
 #include "config.h"
 
-bool checkPortAndNotify(quint16 port) {
-    QTcpServer testServer;
-    if (testServer.listen(QHostAddress::Any, port)) {
-        testServer.close();
+static bool tryBindPort(const QHostAddress& address, quint16 port) {
+    QTcpServer probe;
+    if (probe.listen(address, port)) {
+        probe.close();
         return true;
     }
-    
-    QString processInfo = "";
-    
+    return false;
+}
+
+static QString findPortOwnerProcess(quint16 port) {
 #ifdef _WIN32
     QProcess process;
     process.start("netstat", QStringList() << "-ano");
     process.waitForFinished();
-    
+
     QString output = process.readAllStandardOutput();
     QStringList lines = output.split("\n");
-    
+
     QString portStr = QString(":%1").arg(port);
     for (const QString& line : lines) {
         if (line.contains(portStr) && line.contains("LISTENING")) {
@@ -50,49 +51,87 @@ bool checkPortAndNotify(quint16 port) {
                 pidProcess.start("tasklist", QStringList() << "/FI" << QString("PID eq %1").arg(pid) << "/FO" << "CSV" << "/NH");
                 pidProcess.waitForFinished();
                 QString pidOutput = pidProcess.readAllStandardOutput();
-                
+
                 QString processName = pidOutput.section(",", 0, 0).remove("\"");
                 if (processName.isEmpty()) {
                     processName = QString("PID: %1").arg(pid);
                 }
-                
-                processInfo = QString("%1 (PID: %2)").arg(processName, pid);
-                break;
+
+                return QString("%1 (PID: %2)").arg(processName, pid);
             }
         }
     }
 #endif
-    
-    QString appName = "key-statics";
-    if (processInfo.contains(appName, Qt::CaseInsensitive)) {
-        QMessageBox::critical(nullptr, "Error",
-            QString("<h3>key-statics is already running</h3>"
-                    "<p>Port %1 is occupied by another key-statics instance.</p>"
-                    "<p>Multi-instance is not supported. Please close the existing instance.</p>"
-                    "<hr><p>%2</p>").arg(port).arg(processInfo));
-    } else {
-        QMessageBox::critical(nullptr, "Port Error",
-            QString("<h3>Port occupied</h3>"
-                    "<p>Port %1 is occupied by another program.</p>"
-                    "<p>Please close the program using this port.</p>"
-                    "<hr><p><b>Process:</b> %2</p>").arg(port).arg(processInfo.isEmpty() ? "Unknown" : processInfo));
-    }
-    
-    return false;
+    return QString();
 }
 
 int main(int argc, char *argv[]) {
     QApplication app(argc, argv);
     app.setApplicationName("key-statics");
     app.setQuitOnLastWindowClosed(false);
-    
-    Config::instance()->load();
-    quint16 port = Config::instance()->serverPort();
-    
-    if (!checkPortAndNotify(port)) {
-        return 1;
+
+    Config* config = Config::instance();
+    config->load();
+
+    const QHostAddress bindAddress = config->allowRemoteAccess()
+        ? QHostAddress(QHostAddress::Any)
+        : QHostAddress(QHostAddress::LocalHost);
+
+    quint16 port = config->serverPort();
+
+    if (!tryBindPort(bindAddress, port)) {
+        QString processInfo = findPortOwnerProcess(port);
+
+        if (processInfo.contains("key-statics", Qt::CaseInsensitive)) {
+            QMessageBox::critical(nullptr, "Error",
+                QString("<h3>key-statics is already running</h3>"
+                        "<p>Port %1 is occupied by another key-statics instance.</p>"
+                        "<p>Multi-instance is not supported. Please close the existing instance.</p>"
+                        "<hr><p>%2</p>").arg(port).arg(processInfo));
+            return 1;
+        }
+
+        if (!config->autoPortIfOccupied()) {
+            QMessageBox::critical(nullptr, "Port Error",
+                QString("<h3>Port occupied</h3>"
+                        "<p>Port %1 is occupied by another program.</p>"
+                        "<p>Please close the program using this port, or set "
+                        "<code>server.autoPortIfOccupied</code> to <code>true</code> in config.json.</p>"
+                        "<hr><p><b>Process:</b> %2</p>").arg(port).arg(processInfo.isEmpty() ? "Unknown" : processInfo));
+            return 1;
+        }
+
+        quint16 fallbackPort = 0;
+        for (int candidate = port + 1; candidate <= port + 100; ++candidate) {
+            if (tryBindPort(bindAddress, static_cast<quint16>(candidate))) {
+                fallbackPort = static_cast<quint16>(candidate);
+                break;
+            }
+        }
+
+        if (fallbackPort == 0) {
+            QMessageBox::critical(nullptr, "Port Error",
+                QString("<h3>Port occupied</h3>"
+                        "<p>Port %1 is occupied and no free port was found in range %2-%3.</p>"
+                        "<hr><p><b>Process:</b> %4</p>")
+                    .arg(port).arg(port + 1).arg(port + 100)
+                    .arg(processInfo.isEmpty() ? "Unknown" : processInfo));
+            return 1;
+        }
+
+        QMessageBox::information(nullptr, "Port Changed",
+            QString("<h3>Port %1 is occupied</h3>"
+                    "<p>key-statics will use port <b>%2</b> instead.</p>"
+                    "<p>Update your OBS Browser Source URL to "
+                    "<code>http://localhost:%2/</code></p>"
+                    "<hr><p><b>Occupied by:</b> %3</p>")
+                .arg(port).arg(fallbackPort)
+                .arg(processInfo.isEmpty() ? "Unknown" : processInfo));
+
+        config->setServerPort(fallbackPort);
+        port = fallbackPort;
     }
-    
+
     MainWindow window;
     window.hide();
 

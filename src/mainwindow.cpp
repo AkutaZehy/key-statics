@@ -50,21 +50,29 @@ MainWindow::MainWindow(QWidget* parent)
         qWarning() << "Failed to load keyboard layout!";
     }
 
-    m_keyboardHook = new KeyboardHook(this);
+    // Low-level hooks live on a dedicated thread: if the GUI thread ever
+    // stalls, Windows would otherwise silently drop the system-wide hooks
+    // after a timeout and stats would stop without any error.
+    m_hookThread = new QThread(this);
+    m_hookThread->setObjectName("input-hook");
+
+    m_keyboardHook = new KeyboardHook();
+    m_keyboardHook->moveToThread(m_hookThread);
+    connect(m_hookThread, &QThread::started, m_keyboardHook, &KeyboardHook::start);
+    connect(m_hookThread, &QThread::finished, m_keyboardHook, &QObject::deleteLater);
+
+    m_mouseHook = new MouseHook();
+    m_mouseHook->moveToThread(m_hookThread);
+    connect(m_hookThread, &QThread::started, m_mouseHook, &MouseHook::start);
+    connect(m_hookThread, &QThread::finished, m_mouseHook, &QObject::deleteLater);
+
     connect(m_keyboardHook, &KeyboardHook::keyPressed, this, &MainWindow::onKeyPressed);
     connect(m_keyboardHook, &KeyboardHook::keyReleased, this, &MainWindow::onKeyReleased);
-
-    if (!m_keyboardHook->start()) {
-        qWarning() << "Failed to start keyboard hook!";
-    }
-    
-    m_mouseHook = new MouseHook(this);
     connect(m_mouseHook, &MouseHook::buttonPressed, this, &MainWindow::onMousePressed);
     connect(m_mouseHook, &MouseHook::buttonReleased, this, &MainWindow::onMouseReleased);
-    
-    if (!m_mouseHook->start()) {
-        qWarning() << "Failed to start mouse hook!";
-    }
+    connect(m_mouseHook, &MouseHook::mouseMoved, this, &MainWindow::onMouseMoved);
+
+    m_hookThread->start();
 
     m_httpServer = new HttpServer(m_keyStats, this);
     m_httpServer->setLayout(m_layout);
@@ -92,6 +100,10 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_sysTray, &SysTray::requestPreviewLayout, this, [this]() {
         if (!m_previewWindow) {
             m_previewWindow = new PreviewWindow();
+            connect(m_keyboardHook, &KeyboardHook::keyPressed, m_previewWindow, &PreviewWindow::onKeyPressed);
+            connect(m_keyboardHook, &KeyboardHook::keyReleased, m_previewWindow, &PreviewWindow::onKeyReleased);
+            connect(m_mouseHook, &MouseHook::buttonPressed, m_previewWindow, &PreviewWindow::onMousePressed);
+            connect(m_mouseHook, &MouseHook::buttonReleased, m_previewWindow, &PreviewWindow::onMouseReleased);
         }
         m_previewWindow->show();
     });
@@ -101,11 +113,15 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 MainWindow::~MainWindow() {
-    if (m_keyboardHook) {
-        m_keyboardHook->stop();
-    }
-    if (m_mouseHook) {
-        m_mouseHook->stop();
+    if (m_hookThread) {
+        if (m_keyboardHook) {
+            QMetaObject::invokeMethod(m_keyboardHook, "stop", Qt::BlockingQueuedConnection);
+        }
+        if (m_mouseHook) {
+            QMetaObject::invokeMethod(m_mouseHook, "stop", Qt::BlockingQueuedConnection);
+        }
+        m_hookThread->quit();
+        m_hookThread->wait();
     }
     if (m_httpServer) {
         m_httpServer->stop();
@@ -187,6 +203,18 @@ void MainWindow::onMouseReleased(int vkCode) {
     }
 }
 
+void MainWindow::onMouseMoved(int dx, int dy) {
+    if (m_keyStats) {
+        m_keyStats->recordMouseMotion(dx, dy);
+    }
+    if (m_keyboard) {
+        m_keyboard->onMouseMotion(dx, dy);
+    }
+    if (m_previewWindow) {
+        m_previewWindow->onMouseMotion(dx, dy);
+    }
+}
+
 void MainWindow::resetStats() {
     if (m_keyStats) {
         m_keyStats->reset();
@@ -215,7 +243,7 @@ void MainWindow::showAbout() {
     
     layout->addSpacing(15);
     
-    QLabel* version = new QLabel(QString("Version: v%1").arg("1.2.0"), &aboutDialog);
+    QLabel* version = new QLabel(QString("Version: v%1").arg(KEY_STATICS_VERSION), &aboutDialog);
     version->setAlignment(Qt::AlignCenter);
     layout->addWidget(version);
     

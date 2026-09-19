@@ -55,37 +55,12 @@ PreviewWindow::PreviewWindow(QWidget* parent)
     
     setCentralWidget(centralWidget);
     
-    m_keyboardHook = new KeyboardHook(this);
-    connect(m_keyboardHook, &KeyboardHook::keyPressed, this, &PreviewWindow::onKeyPressed);
-    connect(m_keyboardHook, &KeyboardHook::keyReleased, this, &PreviewWindow::onKeyReleased);
-    
-    m_mouseHook = new MouseHook(this);
-    connect(m_mouseHook, &MouseHook::buttonPressed, this, &PreviewWindow::onMousePressed);
-    connect(m_mouseHook, &MouseHook::buttonReleased, this, &PreviewWindow::onMouseReleased);
-    
     connect(m_layoutCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), 
             this, &PreviewWindow::onLayoutChanged);
     connect(m_resetButton, &QPushButton::clicked, this, &PreviewWindow::onResetClicked);
     connect(m_closeButton, &QPushButton::clicked, this, &PreviewWindow::close);
     
     loadLayouts();
-    
-    if (m_keyboardHook->start()) {
-        qDebug() << "Preview: keyboard hook started";
-    }
-    
-    if (m_mouseHook->start()) {
-        qDebug() << "Preview: mouse hook started";
-    }
-}
-
-PreviewWindow::~PreviewWindow() {
-    if (m_keyboardHook) {
-        m_keyboardHook->stop();
-    }
-    if (m_mouseHook) {
-        m_mouseHook->stop();
-    }
 }
 
 void PreviewWindow::loadLayouts() {

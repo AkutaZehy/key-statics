@@ -21,6 +21,7 @@
 #include <QSet>
 #include <QMap>
 #include <QSize>
+#include <QTimer>
 #include "keylayout.h"
 
 class VirtualKeyboard : public QWidget {
@@ -36,6 +37,7 @@ public slots:
     void onKeyPressed(int vkCode);
     void onKeyReleased(int vkCode);
     void updatePressedKeys(const QSet<int>& keys);
+    void onMouseMotion(int dx, int dy);
 
 signals:
     void keyClicked(int vkCode);
@@ -43,10 +45,18 @@ signals:
 protected:
     void paintEvent(QPaintEvent* event) override;
 
+private slots:
+    void decayGauge();
+
 private:
+    void drawGauge(QPainter* painter, const QRect& rect) const;
+
     KeyLayout* m_layout = nullptr;
     QSet<int> m_pressedKeys;
     QMap<int, int> m_keyCounts;
+    double m_gaugeVx = 0.0;
+    double m_gaugeVy = 0.0;
+    QTimer* m_gaugeDecayTimer = nullptr;
 
     QColor m_keyNormalColor;
     QColor m_keyPressedColor;

@@ -1,0 +1,42 @@
+name: build
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.10.2'
+          arch: 'win64_mingw'
+
+      - name: Setup MSYS2 (MinGW toolchain)
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: mingw64
+          update: false
+          install: >-
+            mingw-w64-x86_64-cmake
+            mingw-w64-x86_64-ninja
+            mingw-w64-x86_64-gcc
+
+      - name: Configure
+        shell: msys2 {0}
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+        env:
+          QT_ROOT_DIR: ${{ env.QT_ROOT_DIR }}
+
+      - name: Build
+        shell: msys2 {0}
+        run: cmake --build build
+
+      - name: Run tests
+        shell: msys2 {0}
+        run: ctest --test-dir build --output-on-failure

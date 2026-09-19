@@ -32,6 +32,7 @@ public:
 
     quint16 serverPort() const { return m_serverPort; }
     bool autoPortIfOccupied() const { return m_autoPortIfOccupied; }
+    bool allowRemoteAccess() const { return m_allowRemoteAccess; }
     
     int unitWidth() const { return m_unitWidth; }
     int unitHeight() const { return m_unitHeight; }
@@ -40,6 +41,7 @@ public:
     QString keyColor() const { return m_keyColor; }
     QString keyActiveColor() const { return m_keyActiveColor; }
     QString fontFamily() const { return m_fontFamily; }
+    int gaugeMaxSpeed() const { return m_gaugeMaxSpeed; }
     
     QString defaultLayout() const { return m_defaultLayout; }
 
@@ -56,6 +58,7 @@ private:
     
     quint16 m_serverPort = 9876;
     bool m_autoPortIfOccupied = true;
+    bool m_allowRemoteAccess = false;
     
     int m_unitWidth = 40;
     int m_unitHeight = 40;
@@ -64,6 +67,7 @@ private:
     QString m_keyColor = "#444444";
     QString m_keyActiveColor = "#0096FF";
     QString m_fontFamily = "monospace";
+    int m_gaugeMaxSpeed = 3000;
     
     QString m_defaultLayout = "104keys";
 };

@@ -30,10 +30,14 @@ public:
 
     void recordKeyPress(int vkCode);
     void recordKeyRelease(int vkCode);
+    void recordMouseMotion(int dx, int dy);
     void setValidKeys(const QSet<int>& validKeys);
 
     int totalKeyPresses() const { return m_totalKeyPresses; }
     int kps() const { return m_kps; }
+    // Smoothed mouse velocity in px/s; decays to 0 when motion events stop.
+    int mouseVelocityX() const;
+    int mouseVelocityY() const;
     const QMap<int, int>& keyCounts() const { return m_keyCounts; }
     const QSet<int>& pressedKeys() const { return m_pressedKeys; }
 
@@ -54,6 +58,9 @@ private:
     int m_totalKeyPresses = 0;
     int m_kps = 0;
     int m_kpsInstant = 0;
+    double m_mouseVx = 0.0;
+    double m_mouseVy = 0.0;
+    qint64 m_lastMotionMs = 0;
     QTimer* m_kpsTimer = nullptr;
 };
 

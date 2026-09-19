@@ -20,6 +20,8 @@
 #include <QObject>
 #include <QTcpServer>
 #include <QTcpSocket>
+#include <QHash>
+#include <QTimer>
 #include "keystats.h"
 #include "keylayout.h"
 
@@ -30,29 +32,32 @@ public:
     explicit HttpServer(KeyStats* stats, QObject* parent = nullptr);
     ~HttpServer();
 
-    bool start(quint16 port = 9863);
+    bool start(quint16 port = 9876);
     void stop();
     void setLayout(KeyLayout* layout);
 
 private slots:
     void onNewConnection();
-    void onReadyRead();
+    void onStatsChanged();
 
 private:
-    void handleRequest(QTcpSocket* socket);
+    void handleRequest(QTcpSocket* socket, const QString& request);
     void sendHtml(QTcpSocket* socket);
     void sendJson(QTcpSocket* socket);
-    void sendKeys(QTcpSocket* socket);
     void sendSse(QTcpSocket* socket);
     void broadcastSse();
     void sendNotFound(QTcpSocket* socket);
-    QString getPressedKeysJson() const;
+    void writeResponse(QTcpSocket* socket, const QString& response);
+    QString ssePayload() const;
     QString generateKeyboardJson() const;
 
     QTcpServer* m_server = nullptr;
     KeyStats* m_stats = nullptr;
     KeyLayout* m_layout = nullptr;
-    quint16 m_port = 9863;
+    quint16 m_port = 9876;
+    QList<QTcpSocket*> m_sseClients;
+    QHash<QTcpSocket*, QByteArray> m_requestBuffers;
+    QTimer* m_sseCoalesceTimer = nullptr;
 };
 
 #endif
